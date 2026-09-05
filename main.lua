@@ -1,15 +1,16 @@
 --[[
     ========================================================================
-    ⚡ AJIZ HUB - MUSCLE LEGENDS (AUTO FARM & STAT SUITE) ⚡
+    🌟 AJIZ HUB - MUSCLE LEGENDS (SMART AUTO REBIRTH & FARM SUITE) 🌟
     ========================================================================
-    • 🏋️ Auto Farm: Strength, Agility, Durability & Auto Rotate
-    • 👑 Fast King's Gym Tool Farm & Machine Farm
-    • 🔄 Automatic Fast Rebirth & Chain Rebirth
-    • 🧪 Auto Consumables & Boosts
-    • 🎁 Auto Quests, Free Gifts, Fortune Wheel & Chests
-    • 🐾 Auto Crystal Hatching, Best Pet Equip, Junk Sell & Evolution
-    • 📊 Real-Time Stats & Live Gains/Min Tracker
-    • 📱 Mobile Draggable "AJ" Button + PC Clean GUI
+    • 🔄 Smart Auto Rebirth (Auto Fulfills Requirements, Auto Push Boosts & Pet Swaps)
+    • 👑 Auto Rebirth Multiplier Pet Swap (Tribal Overlord + Speedy Sally)
+    • 🏋️ Fast Stat Farmer: Strength, Agility, Durability & Auto Rotate
+    • ⚡ King's Gym Tool Godmode Grinding
+    • 🧪 Smart Consumables & Instant Strength Topping
+    • 🎁 Auto Quests, 6h Chests, Group Rewards, Fortune Wheel & Playtime Gifts
+    • 🐾 Auto Crystal Hatching, Best Pet Equip, Auto Sell & Auto Evolution
+    • 📊 Live Gains/Min & Rebirth Progress Tracker
+    • 📱 Exact Ajiz Hub UI with Mobile Draggable "AJ" Toggle & Red Checkboxes [✓]
 --]]
 
 local function elevate()
@@ -146,13 +147,19 @@ local State = {
     BenchmarkSeconds = 12,
     BenchmarkEvery = 600,
     SourcePreference = "Auto (fastest)",
-    StrengthSource = "Auto (Fastest)",
+    StrengthSource = "Tools (Best for Rebirth)",
     RotateSeconds = 120,
+    
+    -- 🚀 Enhanced Smart Rebirth Configuration
     AutoRebirth = false,
+    SmartRebirthFulfillment = true,
+    AutoRebirthPetSwap = true,
+    AutoRebirthBoostPush = true,
+    
     AutoBoosts = false,
     SaveBigBoosts = false,
-    AutoUltimates = false,
-    UltimatePlan = "Speed",
+    AutoUltimates = true,
+    UltimatePlan = "Rebirth",
     KeepRebirths = 0,
     AutoChests = false,
     AutoGroup = false,
@@ -170,7 +177,7 @@ local State = {
     AutoDeletePets = false,
     DeletePetNames = {},
     AutoEvolvePets = false,
-    AlwaysKingsGym = false,
+    AlwaysKingsGym = true,
     AntiAFK = true,
     Notify = true,
 }
@@ -238,14 +245,14 @@ local function farming(token)
     return running() and State.FarmMode ~= "Off" and token == Runtime.FarmToken
 end
 
-local function notify(title, message, kind, duration)
+local function notify(title, message, dur)
     if not State.Notify then return end
     elevate()
     pcall(function()
         StarterGui:SetCore("SendNotification", {
             Title = "[AJIZ] " .. tostring(title),
             Text = tostring(message),
-            Duration = duration or 3
+            Duration = dur or 3
         })
     end)
 end
@@ -655,7 +662,7 @@ local function useBoosts(forPush)
         if tool.Parent and TIMED_BOOSTS[tool.Name] and not boostActive(tool.Name) then
             if useConsumable(tool) then
                 used = used + 1
-                notify("Boost", "Activated " .. tool.Name, "success")
+                notify("Boost", "Activated " .. tool.Name, 2.5)
             else
                 failed = failed + 1
             end
@@ -672,15 +679,13 @@ local function useBoosts(forPush)
     end
     if hum then pcall(function() hum:UnequipTools() end) end
     if used > 0 then
-        notify("Boosts", used .. " consumable(s) used", "success")
-    elseif failed > 0 then
-        notify("Boosts", "none consumed (" .. failed .. " rejected)", "warning")
+        notify("Boosts", used .. " consumable(s) used", 2.5)
     end
     return used, failed
 end
 
 local function upgradeUltimates()
-    local plan = ULTIMATE_PRIORITY[State.UltimatePlan] or ULTIMATE_PRIORITY.Speed
+    local plan = ULTIMATE_PRIORITY[State.UltimatePlan] or ULTIMATE_PRIORITY.Rebirth
     local done = 0
     for _, name in ipairs(plan) do
         if not running() then break end
@@ -695,7 +700,7 @@ local function upgradeUltimates()
                     if invoke(Remotes.Ultimates, "upgradeUltimate", name) == true then
                         done = done + 1
                         Runtime.Upgrades = Runtime.Upgrades + 1
-                        notify("Ultimate", name .. " -> level " .. (level + 1), "success")
+                        notify("Ultimate", name .. " -> level " .. (level + 1), 2.5)
                         task.wait(0.4)
                     end
                 end
@@ -705,16 +710,118 @@ local function upgradeUltimates()
     return done
 end
 
-local function doRebirth()
-    if State.AutoBoosts and State.SaveBigBoosts and Strength.Value < rebirthTarget() then
-        useBoosts(true)
+local function petPerkStat(pet, name)
+    local perks = pet:FindFirstChild("perksFolder")
+    local v = perks and perks:FindFirstChild(name)
+    if v then return v.Value end
+    local direct = pet:FindFirstChild(name)
+    return direct and direct.Value or 0
+end
+
+local function allPetsCustom(priorityKey)
+    local list = {}
+    local folder = LocalPlayer:FindFirstChild("petsFolder")
+    if not folder then return list end
+    local weights = PET_PRIORITY[priorityKey or State.PetPriority] or PET_PRIORITY["Farm speed"]
+    local statKey = "strength"
+    if State.FarmMode == "Agility" then statKey = "agility"
+    elseif State.FarmMode == "Durability" then statKey = "durability" end
+    for _, rarityFolder in ipairs(folder:GetChildren()) do
+        for _, pet in ipairs(rarityFolder:GetChildren()) do
+            local levelValue = pet:FindFirstChild("level")
+            table.insert(list, {
+                pet = pet,
+                rarity = rarityFolder.Name,
+                perk = weights[pet.Name] or 0,
+                keep = PERK_PETS[pet.Name] ~= nil,
+                rank = RARITY_ORDER[rarityFolder.Name] or 0,
+                power = petPerkStat(pet, statKey),
+                level = levelValue and levelValue.Value or 1,
+            })
+        end
     end
+    table.sort(list, function(a, b)
+        if a.perk ~= b.perk then return a.perk > b.perk end
+        if a.power ~= b.power then return a.power > b.power end
+        if a.rank ~= b.rank then return a.rank > b.rank end
+        return a.level > b.level
+    end)
+    return list
+end
+
+local function equippedSet()
+    local set, slots = {}, 0
+    local folder = LocalPlayer:FindFirstChild("equippedPets")
+    if not folder then return set, 0 end
+    for _, slot in ipairs(folder:GetChildren()) do
+        slots = slots + 1
+        local ref = slot:FindFirstChild("petReference")
+        if ref and ref.Value then set[ref.Value] = true end
+    end
+    return set, slots
+end
+
+local function equipBestPetsCustom(priorityKey)
+    local list = allPetsCustom(priorityKey)
+    if #list == 0 then return end
+
+    local rankOf, allowed = {}, {}
+    for i, entry in ipairs(list) do
+        rankOf[entry.pet] = i
+        if gf("checkIfPlayerHasEnoughStatsForPet", LocalPlayer, entry.pet) ~= false then
+            allowed[#allowed + 1] = entry.pet
+        end
+    end
+    if #allowed == 0 then return end
+
+    local equipped, slots = equippedSet()
+    if slots == 0 then return end
+
+    for _, pet in ipairs(allowed) do
+        equipped = equippedSet()
+        local filled = 0
+        for _ in pairs(equipped) do filled = filled + 1 end
+        if filled >= slots then break end
+        if not equipped[pet] then
+            fire(Remotes.EquipPet, "equipPet", pet)
+            task.wait(0.2)
+            if not equippedSet()[pet] then break end
+        end
+    end
+
+    for _ = 1, 8 do
+        equipped = equippedSet()
+        local best
+        for _, pet in ipairs(allowed) do
+            if not equipped[pet] then best = pet break end
+        end
+        if not best then break end
+        local worst, worstRank
+        for pet in pairs(equipped) do
+            local r = rankOf[pet] or math.huge
+            if not worstRank or r > worstRank then worst, worstRank = pet, r end
+        end
+        if not worst or (rankOf[best] or math.huge) >= worstRank then break end
+        fire(Remotes.EquipPet, "unequipPet", worst)
+        task.wait(0.25)
+        fire(Remotes.EquipPet, "equipPet", best)
+        task.wait(0.25)
+        if not equippedSet()[best] then break end
+    end
+end
+
+local function doRebirth()
+    -- Smart Pre-Rebirth Optimization: Auto Equip Rebirth Pets for extra rebirths & discounts
+    if State.AutoRebirthPetSwap then
+        pcall(function() equipBestPetsCustom("Rebirths") end)
+    end
+    
     if isMounted() then leaveMachine() end
     local beforeStrength = Strength.Value
     local res = invoke(Remotes.Rebirth, "rebirthRequest")
     if res == true then
         Runtime.RebirthCount = Runtime.RebirthCount + 1
-        notify("Rebirth", "Rebirth " .. tostring(Rebirths.Value) .. " complete", "success")
+        notify("Rebirth", "Rebirth " .. tostring(Rebirths.Value) .. " Complete!", 3)
     end
     local t = os.clock()
     while res == true and os.clock() - t < 8 do
@@ -723,7 +830,15 @@ local function doRebirth()
         task.wait(0.03)
     end
     Runtime.Blacklist = {}
+    
+    -- Auto Upgrade Golden Rebirth & Ultimates
     if State.AutoUltimates then pcall(upgradeUltimates) end
+    
+    -- Smart Post-Rebirth Optimization: Auto Swap back to Farm Speed/Strength Pets
+    if State.AutoRebirthPetSwap then
+        pcall(function() equipBestPetsCustom("Farm speed") end)
+    end
+    
     return res == true
 end
 
@@ -734,7 +849,7 @@ local function rebirthChain(maxCount, spendBoosts)
         if not running() then break end
         if not canRebirth() and spendBoosts then
             local before = Strength.Value
-            Runtime.Status = "Topping up for rebirth"
+            Runtime.Status = "Auto pushing boost for rebirth"
             useBoosts(true)
             if Strength.Value <= before then break end
         end
@@ -745,13 +860,23 @@ local function rebirthChain(maxCount, spendBoosts)
         task.wait()
     end
     if gained > 1 then
-        notify("Rebirth", gained .. " rebirths chained", "success", 5)
+        notify("Rebirth Chain", gained .. " rebirths chained!", 4)
     end
     return gained
 end
 
 local function requestAutoRebirth()
-    if not running() or not State.AutoRebirth or Runtime.RebirthBusy or not canRebirth() then return false end
+    if not running() or not State.AutoRebirth or Runtime.RebirthBusy then return false end
+    
+    local target = rebirthTarget()
+    
+    -- Auto Requirement Fulfillment: If close to target, auto pop instant boosts
+    if State.AutoRebirthBoostPush and Strength.Value < target and Strength.Value >= target * 0.85 then
+        useBoosts(true)
+    end
+    
+    if not canRebirth() then return false end
+    
     Runtime.RebirthBusy = true
     Runtime.FarmToken = Runtime.FarmToken + 1
     spawnTask(function()
@@ -774,6 +899,10 @@ spawnTask(function()
 end)
 
 local function resolveMode()
+    -- If AutoRebirth is on and we need strength, ensure strength is prioritized
+    if State.AutoRebirth and State.SmartRebirthFulfillment and Strength.Value < rebirthTarget() then
+        return "Strength"
+    end
     if State.FarmMode ~= "Rotate" then return State.FarmMode end
     local order = {"Strength", "Agility", "Durability"}
     local span = math.max(State.RotateSeconds, 15)
@@ -998,7 +1127,7 @@ local function claimChests()
     for _, name in ipairs(CHEST_NAMES) do
         if invoke(Remotes.Chest, name) == true then
             Runtime.Claimed = Runtime.Claimed + 1
-            notify("Chest", name .. " claimed", "success")
+            notify("Chest", name .. " claimed", 2)
         end
         task.wait(0.25)
     end
@@ -1007,7 +1136,7 @@ end
 local function claimGroup()
     if invoke(Remotes.Group, "groupRewards") == true then
         Runtime.Claimed = Runtime.Claimed + 1
-        notify("Group", "Group reward claimed", "success")
+        notify("Group Reward", "Group reward claimed", 2.5)
     end
 end
 
@@ -1015,7 +1144,7 @@ local function claimGifts()
     for n = 1, 8 do
         if invoke(Remotes.Gift, "claimGift", n) == true then
             Runtime.Claimed = Runtime.Claimed + 1
-            notify("Free gift", "Gift " .. n .. " claimed", "success")
+            notify("Free Gift", "Gift " .. n .. " claimed", 2)
         end
         task.wait(0.25)
     end
@@ -1028,7 +1157,7 @@ local function spinWheel()
         local res = invoke(Remotes.Wheel, "openFortuneWheel", fortuneWheel)
         if type(res) ~= "table" then break end
         Runtime.Claimed = Runtime.Claimed + 1
-        notify("Fortune wheel", tostring(res.name) .. " (" .. tostring(res.rarity) .. ")", "success")
+        notify("Fortune Wheel", tostring(res.name) .. " (" .. tostring(res.rarity) .. ")", 2.5)
         spins = spins - 1
         task.wait(1)
     end
@@ -1043,7 +1172,7 @@ local function collectQuests()
             if gf("checkForCompleteQuest", quest) == true then
                 fire(Remotes.Quests, "collectQuest", quest)
                 Runtime.Claimed = Runtime.Claimed + 1
-                notify("Quest", quest.Name .. " collected", "success")
+                notify("Quest", quest.Name .. " collected", 2)
                 task.wait(0.4)
             end
         end
@@ -1102,7 +1231,7 @@ local function acceptNpcQuests()
                 local action = quest.Parent and quest.Parent.Parent and quest.Parent.Parent.Name == "Industrial Daily"
                     and "createNewIndustrialDaily" or "createNewStoryQuest"
                 fire(Remotes.Quests, action, quest)
-                notify("Quest", npc.Name .. " quest accepted", "success")
+                notify("Quest", npc.Name .. " quest accepted", 2)
                 task.wait(0.4)
             end
         end
@@ -1140,45 +1269,6 @@ local function hatchOnce(name)
     return false, "denied"
 end
 
-local function petPerkStat(pet, name)
-    local perks = pet:FindFirstChild("perksFolder")
-    local v = perks and perks:FindFirstChild(name)
-    if v then return v.Value end
-    local direct = pet:FindFirstChild(name)
-    return direct and direct.Value or 0
-end
-
-local function allPets()
-    local list = {}
-    local folder = LocalPlayer:FindFirstChild("petsFolder")
-    if not folder then return list end
-    local weights = PET_PRIORITY[State.PetPriority] or PET_PRIORITY["Farm speed"]
-    local statKey = "strength"
-    if State.FarmMode == "Agility" then statKey = "agility"
-    elseif State.FarmMode == "Durability" then statKey = "durability" end
-    for _, rarityFolder in ipairs(folder:GetChildren()) do
-        for _, pet in ipairs(rarityFolder:GetChildren()) do
-            local levelValue = pet:FindFirstChild("level")
-            table.insert(list, {
-                pet = pet,
-                rarity = rarityFolder.Name,
-                perk = weights[pet.Name] or 0,
-                keep = PERK_PETS[pet.Name] ~= nil,
-                rank = RARITY_ORDER[rarityFolder.Name] or 0,
-                power = petPerkStat(pet, statKey),
-                level = levelValue and levelValue.Value or 1,
-            })
-        end
-    end
-    table.sort(list, function(a, b)
-        if a.perk ~= b.perk then return a.perk > b.perk end
-        if a.power ~= b.power then return a.power > b.power end
-        if a.rank ~= b.rank then return a.rank > b.rank end
-        return a.level > b.level
-    end)
-    return list
-end
-
 local function inventoryPetNames()
     local names, seen = {}, {}
     local folder = LocalPlayer:FindFirstChild("petsFolder")
@@ -1204,67 +1294,6 @@ local function selectedName(selection, name)
     return false
 end
 
-local function equippedSet()
-    local set, slots = {}, 0
-    local folder = LocalPlayer:FindFirstChild("equippedPets")
-    if not folder then return set, 0 end
-    for _, slot in ipairs(folder:GetChildren()) do
-        slots = slots + 1
-        local ref = slot:FindFirstChild("petReference")
-        if ref and ref.Value then set[ref.Value] = true end
-    end
-    return set, slots
-end
-
-local function equipBestPets()
-    local list = allPets()
-    if #list == 0 then return end
-
-    local rankOf, allowed = {}, {}
-    for i, entry in ipairs(list) do
-        rankOf[entry.pet] = i
-        if gf("checkIfPlayerHasEnoughStatsForPet", LocalPlayer, entry.pet) ~= false then
-            allowed[#allowed + 1] = entry.pet
-        end
-    end
-    if #allowed == 0 then return end
-
-    local equipped, slots = equippedSet()
-    if slots == 0 then return end
-
-    for _, pet in ipairs(allowed) do
-        equipped = equippedSet()
-        local filled = 0
-        for _ in pairs(equipped) do filled = filled + 1 end
-        if filled >= slots then break end
-        if not equipped[pet] then
-            fire(Remotes.EquipPet, "equipPet", pet)
-            task.wait(0.35)
-            if not equippedSet()[pet] then break end
-        end
-    end
-
-    for _ = 1, 12 do
-        equipped = equippedSet()
-        local best
-        for _, pet in ipairs(allowed) do
-            if not equipped[pet] then best = pet break end
-        end
-        if not best then break end
-        local worst, worstRank
-        for pet in pairs(equipped) do
-            local r = rankOf[pet] or math.huge
-            if not worstRank or r > worstRank then worst, worstRank = pet, r end
-        end
-        if not worst or (rankOf[best] or math.huge) >= worstRank then break end
-        fire(Remotes.EquipPet, "unequipPet", worst)
-        task.wait(0.45)
-        fire(Remotes.EquipPet, "equipPet", best)
-        task.wait(0.45)
-        if not equippedSet()[best] then break end
-    end
-end
-
 local function sellJunkPets()
     local selected = State.SellRarities
     if type(selected) ~= "table" then return end
@@ -1272,7 +1301,7 @@ local function sellJunkPets()
     for _, v in pairs(selected) do if v then any = true break end end
     if not any then return end
     local equipped = equippedSet()
-    for _, entry in ipairs(allPets()) do
+    for _, entry in ipairs(allPetsCustom()) do
         if selected[entry.rarity] and not entry.keep and not equipped[entry.pet] then
             fire(Remotes.SellPet, "sellPet", entry.pet)
             task.wait(0.2)
@@ -1285,7 +1314,7 @@ local function deleteSelectedPets()
     if type(selected) ~= "table" then return 0 end
     local equipped = equippedSet()
     local deleted = 0
-    for _, entry in ipairs(allPets()) do
+    for _, entry in ipairs(allPetsCustom()) do
         if selectedName(selected, entry.pet.Name)
             and not entry.keep
             and not equipped[entry.pet] then
@@ -1364,7 +1393,7 @@ spawnTask(function()
             if State.AutoSellPets then pcall(sellJunkPets) end
             if State.AutoDeletePets then pcall(deleteSelectedPets) end
             if State.AutoEvolvePets then pcall(evolveReadyPets) end
-            if State.AutoEquipPets then pcall(equipBestPets) end
+            if State.AutoEquipPets then pcall(function() equipBestPetsCustom() end) end
         end
     end
 end)
@@ -1391,7 +1420,7 @@ LocalPlayer.Idled:Connect(function()
 end)
 
 -- ========================================================================
--- 🎨 STANDALONE AJIZ HUB UI SYSTEM (MODERN SKY BLUE & DARK NAVY)
+-- 🎨 AUTHENTIC AJIZ HUB UI SYSTEM (EXACT DESIGN, RED [✓] BOXES, FLYOUTS)
 -- ========================================================================
 
 local function getGuiContainer()
@@ -1415,14 +1444,14 @@ end
 local parentGui = getGuiContainer()
 
 for _, old in ipairs(parentGui:GetChildren()) do
-    if old.Name == "AjizMuscleLegendsHub" or old:GetAttribute("AjizMuscleLegends") then
+    if old.Name == "AjizMuscleHub" or old:GetAttribute("AjizMuscleHub") then
         pcall(function() old:Destroy() end)
     end
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "AjizMuscleLegendsHub"
-ScreenGui:SetAttribute("AjizMuscleLegends", true)
+ScreenGui.Name = "AjizMuscleHub"
+ScreenGui:SetAttribute("AjizMuscleHub", true)
 ScreenGui.ResetOnSpawn = false
 ScreenGui.DisplayOrder = 999999
 ScreenGui.Parent = parentGui
@@ -1435,6 +1464,21 @@ if RELOAD_STATE and RELOAD_STATE.onCleanup then
         pcall(function() ScreenGui:Destroy() end)
     end)
 end
+
+local Theme = {
+    Background = Color3.fromRGB(15, 17, 24),
+    Header = Color3.fromRGB(20, 23, 32),
+    Border = Color3.fromRGB(32, 38, 52),
+    Accent = Color3.fromRGB(0, 170, 255),       -- Glowing Sky Blue
+    CheckActive = Color3.fromRGB(235, 60, 60),  -- Red Checkbox [✓]
+    CheckInactive = Color3.fromRGB(28, 32, 44),
+    ItemBg = Color3.fromRGB(22, 25, 36),
+    ItemHover = Color3.fromRGB(30, 35, 50),
+    TextPrimary = Color3.fromRGB(245, 248, 255),
+    TextMuted = Color3.fromRGB(140, 148, 165),
+    Font = Enum.Font.GothamBold,
+    FontRegular = Enum.Font.GothamMedium
+}
 
 local function makeDraggable(frame, handle)
     handle = handle or frame
@@ -1462,260 +1506,186 @@ local function makeDraggable(frame, handle)
     end)
 end
 
--- Mobile Floating "AJ" Toggle Icon
-local FloatIcon = Instance.new("ImageButton")
-FloatIcon.Name = "AjizFloatIcon"
-FloatIcon.Size = UDim2.new(0, 44, 0, 44)
-FloatIcon.Position = UDim2.new(0, 15, 0.45, 0)
-FloatIcon.BackgroundColor3 = Color3.fromRGB(20, 23, 32)
-FloatIcon.BorderSizePixel = 0
-FloatIcon.Active = true
-FloatIcon.Parent = ScreenGui
-Instance.new("UICorner", FloatIcon).CornerRadius = UDim.new(0, 8)
-local iconStroke = Instance.new("UIStroke", FloatIcon)
-iconStroke.Color = Color3.fromRGB(0, 170, 255)
+-- Mobile Floating "AJ" Icon
+local MobileToggle = Instance.new("ImageButton")
+MobileToggle.Name = "AjizFloatIcon"
+MobileToggle.Size = UDim2.new(0, 42, 0, 42)
+MobileToggle.Position = UDim2.new(0, 15, 0.45, 0)
+MobileToggle.BackgroundColor3 = Theme.Header
+MobileToggle.BorderSizePixel = 0
+MobileToggle.Active = true
+MobileToggle.Parent = ScreenGui
+Instance.new("UICorner", MobileToggle).CornerRadius = UDim.new(0, 8)
+local iconStroke = Instance.new("UIStroke", MobileToggle)
+iconStroke.Color = Theme.Accent
 iconStroke.Thickness = 1.4
 
-local iconLabel = Instance.new("TextLabel", FloatIcon)
+local iconLabel = Instance.new("TextLabel", MobileToggle)
 iconLabel.Size = UDim2.new(1, 0, 1, 0)
 iconLabel.BackgroundTransparency = 1
-iconLabel.Font = Enum.Font.GothamBold
+iconLabel.Font = Theme.Font
 iconLabel.Text = "AJ"
-iconLabel.TextColor3 = Color3.fromRGB(0, 170, 255)
-iconLabel.TextSize = 15
+iconLabel.TextColor3 = Theme.Accent
+iconLabel.TextSize = 14.5
 
-makeDraggable(FloatIcon)
+makeDraggable(MobileToggle)
 
--- Main Frame (Clean, compact, and responsive)
+-- Compact Main Frame (Exact Ajiz Hub 240px width structure)
+local isMin = false
+local expandedHeight = 440
+
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainPanel"
-MainFrame.Size = UDim2.new(0, 310, 0, 420)
-MainFrame.Position = UDim2.new(0.5, -155, 0.5, -210)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 17, 24)
+MainFrame.Size = UDim2.new(0, 250, 0, expandedHeight)
+MainFrame.Position = UDim2.new(0.5, -125, 0.5, -220)
+MainFrame.BackgroundColor3 = Theme.Background
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true
 MainFrame.Parent = ScreenGui
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 local mainStroke = Instance.new("UIStroke", MainFrame)
-mainStroke.Color = Color3.fromRGB(32, 38, 52)
-mainStroke.Thickness = 1.2
+mainStroke.Color = Theme.Border
+mainStroke.Thickness = 1
 
 -- Header
 local Header = Instance.new("Frame", MainFrame)
-Header.Size = UDim2.new(1, 0, 0, 38)
-Header.BackgroundColor3 = Color3.fromRGB(20, 23, 32)
+Header.Size = UDim2.new(1, 0, 0, 34)
+Header.BackgroundColor3 = Theme.Header
 Header.BorderSizePixel = 0
-Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 8)
 
-local HeaderTitle = Instance.new("TextLabel", Header)
-HeaderTitle.Size = UDim2.new(1, -60, 1, 0)
-HeaderTitle.Position = UDim2.new(0, 12, 0, 0)
-HeaderTitle.BackgroundTransparency = 1
-HeaderTitle.Font = Enum.Font.GothamBold
-HeaderTitle.Text = "⚡ MUSCLE LEGENDS • AJIZ HUB"
-HeaderTitle.TextColor3 = Color3.fromRGB(0, 170, 255)
-HeaderTitle.TextSize = 12.5
-HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+local TitleLabel = Instance.new("TextLabel", Header)
+TitleLabel.Size = UDim2.new(1, -65, 1, 0)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Font = Theme.Font
+TitleLabel.Text = "MUSCLE LEGENDS"
+TitleLabel.TextColor3 = Theme.Accent
+TitleLabel.TextSize = 12
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local MinBtn = Instance.new("TextButton", Header)
+MinBtn.Size = UDim2.new(0, 24, 0, 24)
+MinBtn.Position = UDim2.new(1, -54, 0.5, -12)
+MinBtn.BackgroundColor3 = Color3.fromRGB(28, 32, 44)
+MinBtn.Text = "▲"
+MinBtn.Font = Theme.Font
+MinBtn.TextColor3 = Theme.TextMuted
+MinBtn.TextSize = 11
+MinBtn.AutoButtonColor = false
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 4)
 
 local CloseBtn = Instance.new("TextButton", Header)
 CloseBtn.Size = UDim2.new(0, 24, 0, 24)
-CloseBtn.Position = UDim2.new(1, -30, 0.5, -12)
+CloseBtn.Position = UDim2.new(1, -27, 0.5, -12)
 CloseBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 25)
 CloseBtn.Text = "×"
-CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Font = Theme.Font
 CloseBtn.TextColor3 = Color3.fromRGB(235, 60, 60)
-CloseBtn.TextSize = 14
+CloseBtn.TextSize = 13
 CloseBtn.AutoButtonColor = false
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 4)
 
 makeDraggable(MainFrame, Header)
 
-FloatIcon.Activated:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+MobileToggle.Activated:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 CloseBtn.Activated:Connect(function() MainFrame.Visible = false end)
 
--- Navigation Tab Bar
-local TabBar = Instance.new("ScrollingFrame", MainFrame)
-TabBar.Size = UDim2.new(1, -16, 0, 30)
-TabBar.Position = UDim2.new(0, 8, 0, 42)
-TabBar.BackgroundTransparency = 1
-TabBar.BorderSizePixel = 0
-TabBar.ScrollBarThickness = 0
-TabBar.CanvasSize = UDim2.new(0, 0, 0, 0)
-TabBar.AutomaticCanvasSize = Enum.AutomaticSize.X
+MinBtn.Activated:Connect(function()
+    isMin = not isMin
+    if isMin then
+        TweenService:Create(MainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 250, 0, 34)
+        }):Play()
+        MinBtn.Text = "▼"
+    else
+        TweenService:Create(MainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, 250, 0, expandedHeight)
+        }):Play()
+        MinBtn.Text = "▲"
+    end
+end)
 
-local TabLayout = Instance.new("UIListLayout", TabBar)
-TabLayout.FillDirection = Enum.FillDirection.Horizontal
-TabLayout.Padding = UDim.new(0, 4)
-TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+-- Scrollable List
+local ScrollBody = Instance.new("ScrollingFrame", MainFrame)
+ScrollBody.Size = UDim2.new(1, -12, 1, -62)
+ScrollBody.Position = UDim2.new(0, 6, 0, 38)
+ScrollBody.BackgroundTransparency = 1
+ScrollBody.BorderSizePixel = 0
+ScrollBody.ScrollBarThickness = 2.5
+ScrollBody.ScrollBarImageColor3 = Theme.Accent
+ScrollBody.CanvasSize = UDim2.new(0, 0, 0, 0)
+ScrollBody.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
--- Content Container
-local ContentContainer = Instance.new("Frame", MainFrame)
-ContentContainer.Size = UDim2.new(1, -16, 1, -104)
-ContentContainer.Position = UDim2.new(0, 8, 0, 76)
-ContentContainer.BackgroundTransparency = 1
+local Layout = Instance.new("UIListLayout", ScrollBody)
+Layout.Padding = UDim.new(0, 4)
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
 
 -- Footer
 local Footer = Instance.new("Frame", MainFrame)
-Footer.Size = UDim2.new(1, 0, 0, 24)
-Footer.Position = UDim2.new(0, 0, 1, -24)
-Footer.BackgroundColor3 = Color3.fromRGB(20, 23, 32)
+Footer.Size = UDim2.new(1, 0, 0, 22)
+Footer.Position = UDim2.new(0, 0, 1, -22)
+Footer.BackgroundColor3 = Theme.Header
 Footer.BorderSizePixel = 0
 
-local FooterText = Instance.new("TextLabel", Footer)
-FooterText.Size = UDim2.new(1, 0, 1, 0)
-FooterText.BackgroundTransparency = 1
-FooterText.Font = Enum.Font.GothamBold
-FooterText.Text = "AJIZ HUB • ALL-IN-ONE SUITE"
-FooterText.TextColor3 = Color3.fromRGB(0, 170, 255)
-FooterText.TextSize = 10.5
-
--- Tab Management
-local Tabs = {}
-local TabButtons = {}
-local activeTabName = nil
-
-local function SwitchTab(name)
-    activeTabName = name
-    for tabName, frame in pairs(Tabs) do
-        frame.Visible = (tabName == name)
-    end
-    for tabName, btn in pairs(TabButtons) do
-        local isActive = (tabName == name)
-        btn.BackgroundColor3 = isActive and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(22, 25, 36)
-        btn.TextColor3 = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(160, 170, 190)
-    end
-end
-
-local function CreateTab(name)
-    local Scroll = Instance.new("ScrollingFrame", ContentContainer)
-    Scroll.Name = name .. "Tab"
-    Scroll.Size = UDim2.new(1, 0, 1, 0)
-    Scroll.BackgroundTransparency = 1
-    Scroll.BorderSizePixel = 0
-    Scroll.ScrollBarThickness = 3
-    Scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 170, 255)
-    Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    Scroll.Visible = false
-
-    local Layout = Instance.new("UIListLayout", Scroll)
-    Layout.Padding = UDim.new(0, 5)
-    Layout.SortOrder = Enum.SortOrder.LayoutOrder
-
-    local TabBtn = Instance.new("TextButton", TabBar)
-    TabBtn.Size = UDim2.new(0, 60, 1, 0)
-    TabBtn.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
-    TabBtn.BorderSizePixel = 0
-    TabBtn.Font = Enum.Font.GothamBold
-    TabBtn.Text = name
-    TabBtn.TextColor3 = Color3.fromRGB(160, 170, 190)
-    TabBtn.TextSize = 11
-    TabBtn.AutoButtonColor = false
-    Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 5)
-    local btnStroke = Instance.new("UIStroke", TabBtn)
-    btnStroke.Color = Color3.fromRGB(32, 38, 52)
-    btnStroke.Thickness = 0.8
-
-    TabBtn.Activated:Connect(function()
-        SwitchTab(name)
-    end)
-
-    Tabs[name] = Scroll
-    TabButtons[name] = TabBtn
-    return Scroll
-end
+local FooterLabel = Instance.new("TextLabel", Footer)
+FooterLabel.Size = UDim2.new(1, 0, 1, 0)
+FooterLabel.BackgroundTransparency = 1
+FooterLabel.Font = Theme.Font
+FooterLabel.Text = "AJIZ HUB"
+FooterLabel.TextColor3 = Theme.Accent
+FooterLabel.TextSize = 11.5
 
 -- ========================================================================
--- 🧩 AJIZ UI BUILDER HELPERS
+-- 🧩 AJIZ UI CONTROLS (EXACT SIGNATURE SPEC)
 -- ========================================================================
 
-local function AddSection(tab, title)
-    local Frame = Instance.new("Frame", tab)
-    Frame.Size = UDim2.new(1, 0, 0, 22)
-    Frame.BackgroundTransparency = 1
-
-    local Label = Instance.new("TextLabel", Frame)
-    Label.Size = UDim2.new(1, -8, 1, 0)
-    Label.Position = UDim2.new(0, 4, 0, 0)
-    Label.BackgroundTransparency = 1
-    Label.Font = Enum.Font.GothamBold
-    Label.Text = string.upper(title)
-    Label.TextColor3 = Color3.fromRGB(0, 170, 255)
-    Label.TextSize = 10.5
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-end
-
-local function AddLabel(tab, text)
-    local Frame = Instance.new("Frame", tab)
-    Frame.Size = UDim2.new(1, 0, 0, 28)
-    Frame.BackgroundColor3 = Color3.fromRGB(18, 20, 28)
-    Frame.BorderSizePixel = 0
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
-
-    local Label = Instance.new("TextLabel", Frame)
-    Label.Size = UDim2.new(1, -16, 1, 0)
-    Label.Position = UDim2.new(0, 8, 0, 0)
-    Label.BackgroundTransparency = 1
-    Label.Font = Enum.Font.GothamSemibold
-    Label.Text = text
-    Label.TextColor3 = Color3.fromRGB(220, 230, 245)
-    Label.TextSize = 11
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.TextTruncate = Enum.TextTruncate.AtEnd
-
-    return {
-        SetText = function(str)
-            Label.Text = tostring(str)
-        end
-    }
-end
-
-local function AddToggle(tab, title, default, callback)
+local function AddToggle(title, default, callback)
     local state = default or false
-    local Frame = Instance.new("Frame", tab)
-    Frame.Size = UDim2.new(1, 0, 0, 32)
-    Frame.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
-    Frame.BorderSizePixel = 0
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
-    local stroke = Instance.new("UIStroke", Frame)
-    stroke.Color = Color3.fromRGB(32, 38, 52)
+    local ItemFrame = Instance.new("Frame", ScrollBody)
+    ItemFrame.Size = UDim2.new(1, 0, 0, 36)
+    ItemFrame.BackgroundColor3 = Theme.ItemBg
+    ItemFrame.BorderSizePixel = 0
+    Instance.new("UICorner", ItemFrame).CornerRadius = UDim.new(0, 5)
+    local stroke = Instance.new("UIStroke", ItemFrame)
+    stroke.Color = Theme.Border
     stroke.Thickness = 0.8
 
-    local Label = Instance.new("TextLabel", Frame)
-    Label.Size = UDim2.new(1, -45, 1, 0)
-    Label.Position = UDim2.new(0, 10, 0, 0)
-    Label.BackgroundTransparency = 1
-    Label.Font = Enum.Font.GothamBold
-    Label.Text = title
-    Label.TextColor3 = Color3.fromRGB(245, 248, 255)
-    Label.TextSize = 11
-    Label.TextXAlignment = Enum.TextXAlignment.Left
+    local Title = Instance.new("TextLabel", ItemFrame)
+    Title.Size = UDim2.new(1, -44, 1, 0)
+    Title.Position = UDim2.new(0, 10, 0, 0)
+    Title.BackgroundTransparency = 1
+    Title.Font = Theme.Font
+    Title.Text = title
+    Title.TextColor3 = Theme.TextPrimary
+    Title.TextSize = 11.5
+    Title.TextXAlignment = Enum.TextXAlignment.Left
 
-    local Box = Instance.new("Frame", Frame)
-    Box.Size = UDim2.new(0, 18, 0, 18)
-    Box.Position = UDim2.new(1, -26, 0.5, -9)
-    Box.BackgroundColor3 = state and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(28, 32, 44)
+    local Box = Instance.new("Frame", ItemFrame)
+    Box.Size = UDim2.new(0, 20, 0, 20)
+    Box.Position = UDim2.new(1, -30, 0.5, -10)
+    Box.BackgroundColor3 = state and Theme.CheckActive or Theme.CheckInactive
     Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 4)
     local boxStroke = Instance.new("UIStroke", Box)
-    boxStroke.Color = state and Color3.fromRGB(0, 210, 255) or Color3.fromRGB(45, 52, 70)
+    boxStroke.Color = state and Color3.fromRGB(255, 90, 90) or Color3.fromRGB(45, 52, 70)
 
     local Check = Instance.new("TextLabel", Box)
     Check.Size = UDim2.new(1, 0, 1, 0)
     Check.BackgroundTransparency = 1
-    Check.Font = Enum.Font.GothamBold
+    Check.Font = Theme.Font
     Check.Text = state and "✓" or ""
     Check.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Check.TextSize = 12
+    Check.TextSize = 13
 
-    local Btn = Instance.new("TextButton", Frame)
+    local Btn = Instance.new("TextButton", ItemFrame)
     Btn.Size = UDim2.new(1, 0, 1, 0)
     Btn.BackgroundTransparency = 1
     Btn.Text = ""
 
     local function update(val)
         state = val
-        Box.BackgroundColor3 = state and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(28, 32, 44)
-        boxStroke.Color = state and Color3.fromRGB(0, 210, 255) or Color3.fromRGB(45, 52, 70)
+        Box.BackgroundColor3 = state and Theme.CheckActive or Theme.CheckInactive
+        boxStroke.Color = state and Color3.fromRGB(255, 90, 90) or Color3.fromRGB(45, 52, 70)
         Check.Text = state and "✓" or ""
         if callback then task.spawn(callback, state) end
     end
@@ -1724,82 +1694,82 @@ local function AddToggle(tab, title, default, callback)
     return { SetValue = update }
 end
 
-local function AddButton(tab, title, callback)
-    local Frame = Instance.new("Frame", tab)
-    Frame.Size = UDim2.new(1, 0, 0, 32)
-    Frame.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
-    Frame.BorderSizePixel = 0
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
-    local stroke = Instance.new("UIStroke", Frame)
-    stroke.Color = Color3.fromRGB(32, 38, 52)
+local function AddButton(title, callback)
+    local ItemFrame = Instance.new("Frame", ScrollBody)
+    ItemFrame.Size = UDim2.new(1, 0, 0, 36)
+    ItemFrame.BackgroundColor3 = Theme.ItemBg
+    ItemFrame.BorderSizePixel = 0
+    Instance.new("UICorner", ItemFrame).CornerRadius = UDim.new(0, 5)
+    local stroke = Instance.new("UIStroke", ItemFrame)
+    stroke.Color = Theme.Border
     stroke.Thickness = 0.8
 
-    local Label = Instance.new("TextLabel", Frame)
-    Label.Size = UDim2.new(1, -40, 1, 0)
-    Label.Position = UDim2.new(0, 10, 0, 0)
-    Label.BackgroundTransparency = 1
-    Label.Font = Enum.Font.GothamBold
-    Label.Text = title
-    Label.TextColor3 = Color3.fromRGB(0, 170, 255)
-    Label.TextSize = 11
-    Label.TextXAlignment = Enum.TextXAlignment.Left
+    local Title = Instance.new("TextLabel", ItemFrame)
+    Title.Size = UDim2.new(1, -40, 1, 0)
+    Title.Position = UDim2.new(0, 10, 0, 0)
+    Title.BackgroundTransparency = 1
+    Title.Font = Theme.Font
+    Title.Text = title
+    Title.TextColor3 = Theme.Accent
+    Title.TextSize = 11.5
+    Title.TextXAlignment = Enum.TextXAlignment.Left
 
-    local Arrow = Instance.new("TextLabel", Frame)
+    local Arrow = Instance.new("TextLabel", ItemFrame)
     Arrow.Size = UDim2.new(0, 20, 0, 20)
-    Arrow.Position = UDim2.new(1, -26, 0.5, -10)
+    Arrow.Position = UDim2.new(1, -28, 0.5, -10)
     Arrow.BackgroundTransparency = 1
-    Arrow.Font = Enum.Font.GothamBold
+    Arrow.Font = Theme.Font
     Arrow.Text = "▶"
-    Arrow.TextColor3 = Color3.fromRGB(0, 170, 255)
-    Arrow.TextSize = 10
+    Arrow.TextColor3 = Theme.Accent
+    Arrow.TextSize = 11
 
-    local Btn = Instance.new("TextButton", Frame)
+    local Btn = Instance.new("TextButton", ItemFrame)
     Btn.Size = UDim2.new(1, 0, 1, 0)
     Btn.BackgroundTransparency = 1
     Btn.Text = ""
 
     Btn.Activated:Connect(function()
-        TweenService:Create(Frame, TweenInfo.new(0.08), { BackgroundColor3 = Color3.fromRGB(0, 170, 255) }):Play()
+        TweenService:Create(ItemFrame, TweenInfo.new(0.08), { BackgroundColor3 = Theme.Accent }):Play()
         task.wait(0.08)
-        TweenService:Create(Frame, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(22, 25, 36) }):Play()
+        TweenService:Create(ItemFrame, TweenInfo.new(0.15), { BackgroundColor3 = Theme.ItemBg }):Play()
         if callback then task.spawn(callback) end
     end)
 end
 
-local function AddDropdown(tab, title, options, callback)
+local function AddSelector(title, options, callback)
     local items = options or {}
     local currentIndex = 1
     if #items == 0 then items = {"None"} end
 
-    local Frame = Instance.new("Frame", tab)
-    Frame.Size = UDim2.new(1, 0, 0, 32)
-    Frame.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
-    Frame.BorderSizePixel = 0
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
-    local stroke = Instance.new("UIStroke", Frame)
-    stroke.Color = Color3.fromRGB(32, 38, 52)
+    local ItemFrame = Instance.new("Frame", ScrollBody)
+    ItemFrame.Size = UDim2.new(1, 0, 0, 36)
+    ItemFrame.BackgroundColor3 = Theme.ItemBg
+    ItemFrame.BorderSizePixel = 0
+    Instance.new("UICorner", ItemFrame).CornerRadius = UDim.new(0, 5)
+    local stroke = Instance.new("UIStroke", ItemFrame)
+    stroke.Color = Theme.Border
     stroke.Thickness = 0.8
 
-    local Label = Instance.new("TextLabel", Frame)
+    local Label = Instance.new("TextLabel", ItemFrame)
     Label.Size = UDim2.new(1, -40, 1, 0)
     Label.Position = UDim2.new(0, 10, 0, 0)
     Label.BackgroundTransparency = 1
-    Label.Font = Enum.Font.GothamBold
+    Label.Font = Theme.Font
     Label.Text = title .. ": " .. tostring(items[currentIndex])
-    Label.TextColor3 = Color3.fromRGB(245, 248, 255)
-    Label.TextSize = 11
+    Label.TextColor3 = Theme.TextPrimary
+    Label.TextSize = 11.5
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.TextTruncate = Enum.TextTruncate.AtEnd
 
-    local Arrow = Instance.new("TextLabel", Frame)
-    Arrow.Size = UDim2.new(0, 20, 0, 20)
-    Arrow.Position = UDim2.new(1, -26, 0.5, -10)
-    Arrow.BackgroundTransparency = 1
-    Arrow.Font = Enum.Font.GothamBold
-    Arrow.Text = "🔄"
-    Arrow.TextSize = 11
+    local Icon = Instance.new("TextLabel", ItemFrame)
+    Icon.Size = UDim2.new(0, 20, 0, 20)
+    Icon.Position = UDim2.new(1, -28, 0.5, -10)
+    Icon.BackgroundTransparency = 1
+    Icon.Font = Theme.Font
+    Icon.Text = "🔄"
+    Icon.TextSize = 12
 
-    local Btn = Instance.new("TextButton", Frame)
+    local Btn = Instance.new("TextButton", ItemFrame)
     Btn.Size = UDim2.new(1, 0, 1, 0)
     Btn.BackgroundTransparency = 1
     Btn.Text = ""
@@ -1835,330 +1805,210 @@ local function AddDropdown(tab, title, options, callback)
     }
 end
 
-local function AddMultiSelect(tab, title, options, defaultSelected, callback)
-    local selectedMap = defaultSelected or {}
-    local items = options or {}
-    local idx = 1
-    if #items == 0 then items = {"None"} end
+local function AddLabel(text)
+    local ItemFrame = Instance.new("Frame", ScrollBody)
+    ItemFrame.Size = UDim2.new(1, 0, 0, 28)
+    ItemFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 28)
+    ItemFrame.BorderSizePixel = 0
+    Instance.new("UICorner", ItemFrame).CornerRadius = UDim.new(0, 5)
 
-    local Frame = Instance.new("Frame", tab)
-    Frame.Size = UDim2.new(1, 0, 0, 32)
-    Frame.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
-    Frame.BorderSizePixel = 0
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
-    local stroke = Instance.new("UIStroke", Frame)
-    stroke.Color = Color3.fromRGB(32, 38, 52)
-    stroke.Thickness = 0.8
-
-    local currentItem = items[idx]
-    local isChecked = selectedMap[currentItem] == true
-
-    local Label = Instance.new("TextLabel", Frame)
-    Label.Size = UDim2.new(1, -65, 1, 0)
-    Label.Position = UDim2.new(0, 10, 0, 0)
+    local Label = Instance.new("TextLabel", ItemFrame)
+    Label.Size = UDim2.new(1, -16, 1, 0)
+    Label.Position = UDim2.new(0, 8, 0, 0)
     Label.BackgroundTransparency = 1
-    Label.Font = Enum.Font.GothamBold
-    Label.Text = title .. ": " .. tostring(currentItem)
-    Label.TextColor3 = Color3.fromRGB(245, 248, 255)
-    Label.TextSize = 10.5
+    Label.Font = Theme.FontRegular
+    Label.Text = text
+    Label.TextColor3 = Theme.TextPrimary
+    Label.TextSize = 11
     Label.TextXAlignment = Enum.TextXAlignment.Left
     Label.TextTruncate = Enum.TextTruncate.AtEnd
 
-    local NextBtn = Instance.new("TextButton", Frame)
-    NextBtn.Size = UDim2.new(0, 20, 0, 20)
-    NextBtn.Position = UDim2.new(1, -52, 0.5, -10)
-    NextBtn.BackgroundTransparency = 1
-    NextBtn.Font = Enum.Font.GothamBold
-    NextBtn.Text = "🔄"
-    NextBtn.TextSize = 11
-
-    local Box = Instance.new("Frame", Frame)
-    Box.Size = UDim2.new(0, 18, 0, 18)
-    Box.Position = UDim2.new(1, -26, 0.5, -9)
-    Box.BackgroundColor3 = isChecked and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(28, 32, 44)
-    Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 4)
-    local boxStroke = Instance.new("UIStroke", Box)
-    boxStroke.Color = isChecked and Color3.fromRGB(0, 210, 255) or Color3.fromRGB(45, 52, 70)
-
-    local Check = Instance.new("TextLabel", Box)
-    Check.Size = UDim2.new(1, 0, 1, 0)
-    Check.BackgroundTransparency = 1
-    Check.Font = Enum.Font.GothamBold
-    Check.Text = isChecked and "✓" or ""
-    Check.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Check.TextSize = 12
-
-    local ToggleBtn = Instance.new("TextButton", Box)
-    ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
-    ToggleBtn.BackgroundTransparency = 1
-    ToggleBtn.Text = ""
-
-    local function refreshDisplay()
-        currentItem = items[idx]
-        isChecked = selectedMap[currentItem] == true
-        Label.Text = title .. ": " .. tostring(currentItem)
-        Box.BackgroundColor3 = isChecked and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(28, 32, 44)
-        boxStroke.Color = isChecked and Color3.fromRGB(0, 210, 255) or Color3.fromRGB(45, 52, 70)
-        Check.Text = isChecked and "✓" or ""
-    end
-
-    NextBtn.Activated:Connect(function()
-        idx = idx + 1
-        if idx > #items then idx = 1 end
-        refreshDisplay()
-    end)
-
-    ToggleBtn.Activated:Connect(function()
-        selectedMap[currentItem] = not (selectedMap[currentItem] == true)
-        refreshDisplay()
-        if callback then task.spawn(callback, selectedMap) end
-    end)
-
     return {
-        SetOptions = function(newOpts)
-            items = newOpts
-            if #items == 0 then items = {"None"} end
-            idx = 1
-            refreshDisplay()
-        end
+        SetText = function(str) Label.Text = tostring(str) end
     }
 end
 
-local function AddProgressBar(tab, title, getter)
-    local Frame = Instance.new("Frame", tab)
-    Frame.Size = UDim2.new(1, 0, 0, 36)
-    Frame.BackgroundColor3 = Color3.fromRGB(18, 20, 28)
-    Frame.BorderSizePixel = 0
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
+local function AddSection(title)
+    local Frame = Instance.new("Frame", ScrollBody)
+    Frame.Size = UDim2.new(1, 0, 0, 22)
+    Frame.BackgroundTransparency = 1
 
     local Label = Instance.new("TextLabel", Frame)
-    Label.Size = UDim2.new(1, -16, 0, 16)
-    Label.Position = UDim2.new(0, 8, 0, 2)
+    Label.Size = UDim2.new(1, -8, 1, 0)
+    Label.Position = UDim2.new(0, 4, 0, 0)
     Label.BackgroundTransparency = 1
-    Label.Font = Enum.Font.GothamBold
-    Label.Text = title
-    Label.TextColor3 = Color3.fromRGB(220, 230, 245)
-    Label.TextSize = 10.5
+    Label.Font = Theme.Font
+    Label.Text = "• " .. string.upper(title) .. " •"
+    Label.TextColor3 = Theme.Accent
+    Label.TextSize = 11
     Label.TextXAlignment = Enum.TextXAlignment.Left
-
-    local BarBg = Instance.new("Frame", Frame)
-    BarBg.Size = UDim2.new(1, -16, 0, 8)
-    BarBg.Position = UDim2.new(0, 8, 0, 22)
-    BarBg.BackgroundColor3 = Color3.fromRGB(28, 32, 44)
-    BarBg.BorderSizePixel = 0
-    Instance.new("UICorner", BarBg).CornerRadius = UDim.new(0, 4)
-
-    local Fill = Instance.new("Frame", BarBg)
-    Fill.Size = UDim2.new(0, 0, 1, 0)
-    Fill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-    Fill.BorderSizePixel = 0
-    Instance.new("UICorner", Fill).CornerRadius = UDim.new(0, 4)
-
-    spawnTask(function()
-        while running() do
-            if getter then
-                local pct = math.clamp(getter() or 0, 0, 1)
-                Fill.Size = UDim2.new(pct, 0, 1, 0)
-            end
-            task.wait(0.5)
-        end
-    end)
 end
 
 -- ========================================================================
--- 📑 CREATE TABS & POPULATE AJIZ HUB INTERFACE
+-- 📋 POPULATE ENHANCED AJIZ HUB FEATURES
 -- ========================================================================
 
-local FarmTab    = CreateTab("Farm")
-local BoostTab   = CreateTab("Boosts")
-local CollectTab = CreateTab("Collect")
-local PetsTab    = CreateTab("Pets")
-local StatsTab   = CreateTab("Stats")
-local MiscTab    = CreateTab("Misc")
+-- 1. 🔄 SMART AUTO REBIRTH (FULLY AUTOMATED REQUIREMENT FULFILLMENT)
+AddSection("Smart Auto Rebirth System")
 
--- 1. 🏋️ FARM TAB
-AddSection(FarmTab, "Farm Status & Controls")
-local statusLabel = AddLabel(FarmTab, "Status: Idle")
-local targetLabel = AddLabel(FarmTab, "Target: none")
-local benchLabel  = AddLabel(FarmTab, "Benchmark: not run")
+local rebirthStatusLabel = AddLabel("Next Rebirth: Calculating...")
 
-local farmModeDropdown = AddDropdown(FarmTab, "Mode", {"Off", "Strength", "Agility", "Durability", "Rotate"}, function(v)
-    if v == "Off" then
-        stopFarm()
-        notify("Auto Farm", "Stopped", "warning")
+AddToggle("🏆 Smart Auto Rebirth", false, function(state)
+    State.AutoRebirth = state
+    if state then
+        notify("Auto Rebirth", "Smart Requirement Fulfillment & Multi-Rebirth Active!", 3)
+        requestAutoRebirth()
     else
-        State.FarmMode = v
-        startFarm()
-        notify("Auto Farm", "Mode set to " .. v, "info")
+        notify("Auto Rebirth", "Auto Rebirth Paused.", 2)
     end
 end)
 
-AddDropdown(FarmTab, "Strength Source", {"Auto (Fastest)", "Machines", "Tools (Best for Rebirth)"}, function(v)
-    State.StrengthSource = v
+AddToggle("⚡ Auto Boost Push for Rebirth", true, function(state)
+    State.AutoRebirthBoostPush = state
+end)
+
+AddToggle("🐾 Auto Swap Rebirth Perk Pets", true, function(state)
+    State.AutoRebirthPetSwap = state
+end)
+
+AddToggle("👑 Auto Upgrade Rebirth Ultimates", true, function(state)
+    State.AutoUltimates = state
+end)
+
+AddButton("🔄 Rebirth Now (Instant Chain)", function()
+    spawnTask(function()
+        local wasFarming = State.FarmMode
+        Runtime.FarmToken = Runtime.FarmToken + 1
+        local gained = rebirthChain(50, true)
+        notify("Rebirth Chain", gained > 0 and (gained .. " rebirth(s) completed!") or "Not enough strength yet", 3)
+        if wasFarming ~= "Off" then startFarm() end
+    end)
+end)
+
+-- 2. 🏋️ FAST AUTO FARM CONTROLS
+AddSection("Fast Auto Farm")
+
+local farmStatusLabel = AddLabel("Status: Idle")
+local farmTargetLabel = AddLabel("Target: none")
+
+local farmModeSelector = AddSelector("Stat Farm", {"Off", "Strength", "Agility", "Durability", "Rotate"}, function(mode)
+    if mode == "Off" then
+        stopFarm("Stopped by user")
+        notify("Auto Farm", "Farm Stopped.", 2)
+    else
+        State.FarmMode = mode
+        startFarm()
+        notify("Auto Farm", "Farming " .. mode .. " Started!", 2.5)
+    end
+end)
+
+AddSelector("Strength Method", {"Tools (Best for Rebirth)", "Auto (Fastest)", "Machines"}, function(source)
+    State.StrengthSource = source
     Runtime.Rates = {}
     Runtime.Blacklist = {}
     if State.FarmMode == "Strength" then startFarm() end
 end)
 
-local function setFarmMode(mode)
-    if farmModeDropdown and farmModeDropdown.SetValue then
-        pcall(farmModeDropdown.SetValue, mode)
-    elseif mode == "Off" then
-        stopFarm()
-    else
-        State.FarmMode = mode
-        startFarm()
-    end
-end
-
-if State.FarmMode ~= "Off" then setFarmMode("Off") end
-
-AddSection(FarmTab, "Automatic Rebirth")
-local rebirthLabel = AddLabel(FarmTab, "Next rebirth at: ?")
-
-AddToggle(FarmTab, "Auto Rebirth", false, function(v)
-    State.AutoRebirth = v
-    if v then requestAutoRebirth() end
+AddToggle("🏰 King's Gym Tool Farm", true, function(state)
+    State.AlwaysKingsGym = state
+    if state then spawnTask(teleportToKingsGym) end
 end)
 
-AddButton(FarmTab, "Rebirth Now", function()
+AddButton("🛑 Stop Farming / Free Character", function()
+    farmModeSelector.SetValue("Off")
+    stopFarm("Freed character")
+end)
+
+-- 3. 🧪 CONSUMABLES & BOOSTS
+AddSection("Consumables & Boosts")
+local boostHeldLabel = AddLabel("Held Boosts: -")
+AddToggle("🧪 Auto Use Timed Boosts", false, function(state)
+    State.AutoBoosts = state
+end)
+AddButton("⚡ Consume All Shakes & Bars Now", function()
+    spawnTask(function() useBoosts(true) end)
+end)
+
+-- 4. 🎁 AUTO CLAIMS & REWARDS
+AddSection("Automatic Reward Claims")
+AddToggle("📦 Auto Chests (6h Timers)", false, function(state) State.AutoChests = state end)
+AddToggle("👥 Auto Group Rewards", false, function(state) State.AutoGroup = state end)
+AddToggle("🎁 Auto Free Playtime Gifts", false, function(state) State.AutoGifts = state end)
+AddToggle("🎡 Auto Fortune Wheel", false, function(state) State.AutoWheel = state end)
+AddToggle("📜 Auto Story & Daily Quests", false, function(state)
+    State.AutoQuests = state
+    if state then spawnTask(updateNpcQuests) end
+end)
+
+AddButton("🎁 Claim All Rewards Now", function()
     spawnTask(function()
-        local wasFarming = State.FarmMode
-        Runtime.FarmToken = Runtime.FarmToken + 1
-        local gained = rebirthChain(50, true)
-        notify("Rebirth", gained > 0 and (gained .. " rebirth(s)") or "Denied (not enough strength)",
-            gained > 0 and "success" or "error")
-        if wasFarming ~= "Off" then startFarm() end
+        pcall(claimChests)
+        pcall(claimGroup)
+        pcall(claimGifts)
+        pcall(spinWheel)
+        pcall(updateNpcQuests)
+        notify("Rewards", "All reward claims executed!", 2.5)
     end)
 end)
 
-AddButton(FarmTab, "Stop Farming / Free Character", function()
-    setFarmMode("Off")
-end)
-
--- 2. 🧪 BOOSTS TAB
-AddSection(BoostTab, "Consumables & Boosts")
-local boostLabel = AddLabel(BoostTab, "Held: -")
-AddToggle(BoostTab, "Auto Use Boosts", false, function(v) State.AutoBoosts = v end)
-AddButton(BoostTab, "Use All Boosts Now", function() spawnTask(function() useBoosts(true) end) end)
-
--- 3. 🎁 COLLECT TAB
-AddSection(CollectTab, "Auto Claim Features")
-AddToggle(CollectTab, "Auto Chests (6h Timers)", false, function(v) State.AutoChests = v end)
-AddToggle(CollectTab, "Auto Group Rewards", false, function(v) State.AutoGroup = v end)
-AddToggle(CollectTab, "Auto Free Gifts (Playtime)", false, function(v) State.AutoGifts = v end)
-AddToggle(CollectTab, "Auto Fortune Wheel (Free Spins)", false, function(v) State.AutoWheel = v end)
-AddToggle(CollectTab, "Auto Story & Daily Quests", false, function(v)
-    State.AutoQuests = v
-    if v then spawnTask(updateNpcQuests) end
-end)
-
-AddSection(CollectTab, "Manual Claims")
-AddButton(CollectTab, "Claim All Chests Now", function() spawnTask(claimChests) end)
-AddButton(CollectTab, "Claim Group Reward Now", function() spawnTask(claimGroup) end)
-AddButton(CollectTab, "Claim Free Gifts Now", function() spawnTask(claimGifts) end)
-AddButton(CollectTab, "Spin Fortune Wheel Now", function() spawnTask(spinWheel) end)
-AddButton(CollectTab, "Get & Collect NPC Quests Now", function() spawnTask(updateNpcQuests) end)
-
--- 4. 🐾 PETS TAB
-AddSection(PetsTab, "Crystal Hatching")
+-- 5. 🐾 CRYSTAL HATCHING & PETS
+AddSection("Pet Hatching & Management")
 local crystalNames = {}
 for _, c in ipairs(crystalPrices:GetChildren()) do table.insert(crystalNames, c.Name) end
 table.sort(crystalNames)
 
-local hatchLabel = AddLabel(PetsTab, "Selected: Blue Crystal")
+local crystalHatchLabel = AddLabel("Selected: Blue Crystal")
 
-AddDropdown(PetsTab, "Crystal", crystalNames, function(v)
-    State.HatchCrystal = v
-    local price, kind = crystalCost(v)
-    if hatchLabel then hatchLabel.SetText(("Selected: %s | %s %s"):format(v, short(price or 0), kind or "Gems")) end
+AddSelector("Crystal", crystalNames, function(cName)
+    State.HatchCrystal = cName
+    local price, kind = crystalCost(cName)
+    crystalHatchLabel.SetText(("Selected: %s (%s %s)"):format(cName, short(price or 0), kind or "Gems"))
 end)
 
-AddToggle(PetsTab, "Auto Hatch", false, function(v) State.AutoHatch = v end)
-AddButton(PetsTab, "Hatch x1", function()
+AddToggle("🥚 Auto Hatch Crystal", false, function(state) State.AutoHatch = state end)
+AddButton("✨ Hatch x1", function()
     spawnTask(function()
         local ok, info = hatchOnce(State.HatchCrystal)
-        notify("Hatch", ok and info or ("Failed: " .. tostring(info)), ok and "success" or "error")
+        notify("Hatch", ok and info or ("Failed: " .. tostring(info)), 2)
     end)
 end)
-AddButton(PetsTab, "Hatch x10", function()
+AddButton("🌟 Hatch x10", function()
     spawnTask(function()
         local got = 0
         for _ = 1, 10 do
             if hatchOnce(State.HatchCrystal) then got = got + 1 else break end
             task.wait(0.3)
         end
-        notify("Hatch", got .. " pets hatched", got > 0 and "success" or "warning")
+        notify("Hatch", got .. " pets hatched!", 2.5)
     end)
 end)
 
-AddSection(PetsTab, "Pet Management")
-AddToggle(PetsTab, "Auto Equip Best Pets", false, function(v) State.AutoEquipPets = v end)
-AddButton(PetsTab, "Equip Best Pets Now", function() spawnTask(equipBestPets) end)
-
-AddMultiSelect(PetsTab, "Auto Sell Rarities", {"Basic", "Rare", "Epic", "Unique", "Advanced"}, {}, function(sel)
-    State.SellRarities = sel or {}
-end)
-AddToggle(PetsTab, "Auto Sell Selected Rarities", false, function(v) State.AutoSellPets = v end)
-AddButton(PetsTab, "Sell Selected Rarities Now", function() spawnTask(sellJunkPets) end)
-
-local currentPetNames = inventoryPetNames()
-if #currentPetNames == 0 then currentPetNames = {"No pets found"} end
-
-AddMultiSelect(PetsTab, "Auto Delete Pets", currentPetNames, {}, function(sel)
-    State.DeletePetNames = sel or {}
-end)
-AddToggle(PetsTab, "Auto Delete Selected Pets", false, function(v) State.AutoDeletePets = v end)
-AddButton(PetsTab, "Delete Selected Pets Now", function()
-    spawnTask(function()
-        local n = deleteSelectedPets()
-        notify("Pets", n .. " pet(s) deleted", n > 0 and "success" or "warning")
-    end)
-end)
-
-AddSection(PetsTab, "Pet Evolution")
-AddToggle(PetsTab, "Auto Evolve Ready Pets", false, function(v) State.AutoEvolvePets = v end)
-AddButton(PetsTab, "Evolve All Ready Pets Now", function()
+AddToggle("⚔️ Auto Equip Best Pets", false, function(state) State.AutoEquipPets = state end)
+AddButton("🛡️ Equip Best Pets Now", function() spawnTask(function() equipBestPetsCustom() end) end)
+AddToggle("🧬 Auto Evolve Ready Pets (x5)", false, function(state) State.AutoEvolvePets = state end)
+AddButton("🧬 Evolve All Ready Pets Now", function()
     spawnTask(function()
         local n = evolveReadyPets()
-        notify("Pet Evolution", n .. " pet(s) evolved", n > 0 and "success" or "warning")
+        notify("Evolution", n .. " pet(s) evolved!", 2.5)
     end)
 end)
 
--- 5. 📊 STATS TAB
-AddSection(StatsTab, "Live Character Stats")
-local sStrength   = AddLabel(StatsTab, "Strength: -")
-local sAgility    = AddLabel(StatsTab, "Agility: -")
-local sDurability = AddLabel(StatsTab, "Durability: -")
-local sCurrency   = AddLabel(StatsTab, "Gems: -")
-local sRebirths   = AddLabel(StatsTab, "Rebirths: -")
+-- 6. 📊 LIVE REALTIME STATS
+AddSection("Live Character Stats")
+local liveStatsLabel = AddLabel("Str: - | Agi: - | Dur: -")
+local liveCurrencyLabel = AddLabel("Gems: - | Rebirths: -")
+local liveRateLabel = AddLabel("Gains/min: -")
 
-AddProgressBar(StatsTab, "Progress To Rebirth", function()
-    local need = rebirthTarget()
-    if need <= 0 or need == math.huge then return 0 end
-    return Strength.Value / need
-end)
-
-AddSection(StatsTab, "Session Tracker")
-local sRate    = AddLabel(StatsTab, "Gains/min: -")
-local sSession = AddLabel(StatsTab, "Session: -")
-
-AddButton(StatsTab, "Reset Session Counters", function()
+AddButton("🔄 Reset Session Tracker", function()
     Runtime.Reps, Runtime.Hatched, Runtime.Claimed = 0, 0, 0
     Runtime.RebirthCount, Runtime.Boosts, Runtime.Upgrades, Runtime.Evolved = 0, 0, 0, 0
     Runtime.StartClock = os.clock()
     Runtime.StartStats = {Strength = Strength.Value, Agility = Agility.Value, Durability = Durability.Value}
-    notify("Session", "Counters reset successfully", "info")
+    notify("Session", "Counters reset successfully!", 2)
 end)
 
--- 6. ⚙️ MISC TAB
-AddSection(MiscTab, "Utilities")
-AddToggle(MiscTab, "Keep Farming In King's Gym", false, function(v)
-    State.AlwaysKingsGym = v
-    if v then spawnTask(teleportToKingsGym) end
-end)
-
-AddSection(MiscTab, "Teleports")
+-- 7. 📍 AREA TELEPORTS & MISC
+AddSection("Teleports & Server Utilities")
 local areaParts = areaTeleportParts
 local areaNames = {}
 if areaParts then
@@ -2166,11 +2016,10 @@ if areaParts then
     table.sort(areaNames)
 end
 if #areaNames == 0 then areaNames = {"none"} end
-
 local selectedArea = areaNames[1]
-AddDropdown(MiscTab, "Area Pad", areaNames, function(v) selectedArea = v end)
 
-AddButton(MiscTab, "Teleport To Area Pad", function()
+AddSelector("Area Pad", areaNames, function(pad) selectedArea = pad end)
+AddButton("📍 Teleport To Area Pad", function()
     spawnTask(function()
         if not areaParts then return end
         local part = areaParts:FindFirstChild(selectedArea)
@@ -2182,25 +2031,25 @@ AddButton(MiscTab, "Teleport To Area Pad", function()
     end)
 end)
 
-AddButton(MiscTab, "Rejoin Server", function()
+AddButton("🔁 Rejoin Server", function()
     pcall(function() Remotes.Rejoin:FireServer() end)
     pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer) end)
 end)
 
-AddSection(MiscTab, "Emergency Control")
-AddButton(MiscTab, "Stop Everything", function()
+AddButton("⚠️ Stop All Automations", function()
     State.AutoHatch, State.AutoBoosts, State.AutoUltimates = false, false, false
     State.AutoChests, State.AutoGroup, State.AutoGifts, State.AutoWheel, State.AutoQuests = false, false, false, false, false
     State.AutoEquipPets, State.AutoSellPets, State.AutoDeletePets = false, false, false
     State.AutoEvolvePets, State.AutoRebirth, State.AlwaysKingsGym = false, false, false
-    setFarmMode("Off")
-    notify("Auto Farm", "All automation stopped", "warning")
+    farmModeSelector.SetValue("Off")
+    stopFarm("All automations stopped")
+    notify("Ajiz Hub", "All background routines stopped.", 2.5)
 end)
 
--- Set Default Active Tab
-SwitchTab("Farm")
+-- ========================================================================
+-- 🔄 BACKGROUND LIVE STATS & DASHBOARD REFRESH LOOP
+-- ========================================================================
 
--- Realtime UI updater loop
 spawnTask(function()
     local repsProgress = repsCounter()
     local lastReps = repsProgress and repsProgress.Value or 0
@@ -2209,13 +2058,20 @@ spawnTask(function()
         elevate()
         local elapsed = math.max(os.clock() - Runtime.StartClock, 1)
         local perMin = 60 / elapsed
-        if statusLabel then statusLabel.SetText("Status: " .. Runtime.Status) end
-        if targetLabel then targetLabel.SetText("Target: " .. Runtime.Target) end
-        if benchLabel then benchLabel.SetText("Benchmark: " .. Runtime.Bench) end
-        if rebirthLabel then
-            rebirthLabel.SetText(("Next rebirth at: %s strength (have %s)"):format(short(rebirthTarget()), short(Strength.Value)))
+        
+        local targetReq = rebirthTarget()
+        local pct = math.clamp(Strength.Value / (targetReq > 0 and targetReq or 1) * 100, 0, 100)
+        
+        if rebirthStatusLabel then
+            rebirthStatusLabel.SetText(("Next Rebirth: %s / %s (%.0f%%)"):format(short(Strength.Value), short(targetReq), pct))
         end
-        if boostLabel then
+        if farmStatusLabel then
+            farmStatusLabel.SetText("Status: " .. Runtime.Status)
+        end
+        if farmTargetLabel then
+            farmTargetLabel.SetText("Target: " .. Runtime.Target)
+        end
+        if boostHeldLabel then
             local counts = {}
             for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
                 if TIMED_BOOSTS[tool.Name] or INSTANT_BOOSTS[tool.Name] then
@@ -2224,23 +2080,19 @@ spawnTask(function()
             end
             local parts = {}
             for name, n in pairs(counts) do parts[#parts + 1] = name .. " x" .. n end
-            boostLabel.SetText("Held: " .. (#parts > 0 and table.concat(parts, ", ") or "none"))
+            boostHeldLabel.SetText("Held: " .. (#parts > 0 and table.concat(parts, ", ") or "None"))
         end
-        if sStrength then sStrength.SetText("Strength: " .. short(Strength.Value)) end
-        if sAgility then sAgility.SetText("Agility: " .. short(Agility.Value)) end
-        if sDurability then sDurability.SetText("Durability: " .. short(Durability.Value)) end
-        if sCurrency then sCurrency.SetText(("Gems: %s  |  Tokens: %s"):format(short(Gems.Value), short(Tokens.Value))) end
-        if sRebirths then sRebirths.SetText("Rebirths: " .. short(Rebirths.Value)) end
-        if sRate then
-            sRate.SetText(("Gains/min: Str %s | Agi %s | Dur %s"):format(
+        if liveStatsLabel then
+            liveStatsLabel.SetText(("Str: %s | Agi: %s | Dur: %s"):format(short(Strength.Value), short(Agility.Value), short(Durability.Value)))
+        end
+        if liveCurrencyLabel then
+            liveCurrencyLabel.SetText(("Gems: %s | Rebirths: %s"):format(short(Gems.Value), short(Rebirths.Value)))
+        end
+        if liveRateLabel then
+            liveRateLabel.SetText(("Gains/min: Str +%s | Rebirths: +%d"):format(
                 short(math.floor((Strength.Value - Runtime.StartStats.Strength) * perMin)),
-                short(math.floor((Agility.Value - Runtime.StartStats.Agility) * perMin)),
-                short(math.floor((Durability.Value - Runtime.StartStats.Durability) * perMin))))
-        end
-        if sSession then
-            local landed = repsProgress and (repsProgress.Value - repsStart) or 0
-            sSession.SetText(("Reps: %d (%.1f/s) | Hatched: %d | Claims: %d | Rebirths: %d")
-                :format(landed, landed / elapsed, Runtime.Hatched, Runtime.Claimed, Runtime.RebirthCount))
+                Runtime.RebirthCount
+            ))
         end
         task.wait(0.5)
     end
@@ -2250,27 +2102,16 @@ SESSION.State = State
 SESSION.Runtime = Runtime
 SESSION.api = {
     startFarm = function() startFarm() end,
-    setMode = setFarmMode,
     stopFarm = stopFarm,
     generation = MY_GENERATION,
     generationAlive = generationAlive,
-    ui = {farmMode = farmModeDropdown},
     candidateSources = candidateSources,
     teleportToKingsGym = teleportToKingsGym,
-    machineSources = machineSources,
-    toolSources = toolSources,
     rebirthTarget = rebirthTarget,
     useBoosts = useBoosts,
     upgradeUltimates = upgradeUltimates,
-    claimChests = claimChests,
-    claimGifts = claimGifts,
-    collectQuests = collectQuests,
-    acceptNpcQuests = acceptNpcQuests,
-    equipBestPets = equipBestPets,
-    deleteSelectedPets = deleteSelectedPets,
-    evolveReadyPets = evolveReadyPets,
-    hatchOnce = hatchOnce,
+    equipBestPets = function() equipBestPetsCustom() end,
     rebirthChain = rebirthChain,
 }
 
-notify("Muscle Legends", "Ajiz Hub loaded successfully!", "success", 4)
+notify("Muscle Legends", "Ajiz Hub v4 (Smart Auto Rebirth) Loaded!", 4)
