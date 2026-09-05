@@ -1,6 +1,6 @@
-# Muscle Legends Auto Farm (Roblox)
+# ⚡ Ajiz Hub - Muscle Legends (Roblox)
 
-Open-source Auto Farm script for Roblox Muscle Legends.
+High-performance, feature-packed Muscle Legends Auto Farm script powered by the signature **Ajiz Hub UI**.
 
 ## 🚀 How to Execute / Test
 
@@ -11,10 +11,12 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/adeel-abid-09/muscle-
 ```
 
 ## ✨ Features
-- **Auto Farm Stats**: Strength, Agility, Durability, or Auto Rotate
-- **Automatic Rebirth & Chain Rebirth**
-- **Auto Consumables & Boosts**
-- **Auto Quests, Free Gifts, Wheel Spin, & Chests**
-- **Auto Crystal Hatching & Evolution**
-- **Auto Equip Best Pets & Junk Sell**
-- **Anti-AFK & Live Statistics Dashboard**
+- 🎨 **Ajiz Hub UI**: Dark navy theme, glowing sky blue highlights, tabbed navigation, and mobile draggable "AJ" toggle button.
+- 🏋️ **Auto Farm**: Strength, Agility, Durability, or Auto Rotate.
+- 👑 **Fast King's Gym & Machine Farming**.
+- 🔄 **Automatic Rebirth & Chain Rebirth**.
+- 🧪 **Auto Consumables & Boosts**.
+- 🎁 **Auto Quests, Free Gifts, Wheel Spin, & 6h Chests**.
+- 🐾 **Auto Crystal Hatching, Best Pet Equip, Junk Sell & Evolution**.
+- 📊 **Real-Time Live Stats & Gains/min Tracker**.
+- 🛡️ **Built-in Anti-AFK**.

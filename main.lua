@@ -1,3 +1,17 @@
+--[[
+    ========================================================================
+    ⚡ AJIZ HUB - MUSCLE LEGENDS (AUTO FARM & STAT SUITE) ⚡
+    ========================================================================
+    • 🏋️ Auto Farm: Strength, Agility, Durability & Auto Rotate
+    • 👑 Fast King's Gym Tool Farm & Machine Farm
+    • 🔄 Automatic Fast Rebirth & Chain Rebirth
+    • 🧪 Auto Consumables & Boosts
+    • 🎁 Auto Quests, Free Gifts, Fortune Wheel & Chests
+    • 🐾 Auto Crystal Hatching, Best Pet Equip, Junk Sell & Evolution
+    • 📊 Real-Time Stats & Live Gains/Min Tracker
+    • 📱 Mobile Draggable "AJ" Button + PC Clean GUI
+--]]
+
 local function elevate()
     if setthreadidentity then pcall(setthreadidentity, 8) end
 end
@@ -26,13 +40,14 @@ local function generationAlive()
     return GEN_HOST:GetAttribute(GEN_ATTR) == MY_GENERATION
 end
 
-local GuiLibrary = loadstring(game:HttpGet("https://raw.githubusercontent.com/SoldoxD/libery/refs/heads/main/main"))()
-
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local StarterGui = game:GetService("StarterGui")
 
-local LocalPlayer = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local rEvents = ReplicatedStorage:WaitForChild("rEvents")
 local sharedFolder = ReplicatedStorage:WaitForChild("shared")
 local GF = require(sharedFolder.modules.GlobalFunctions)
@@ -226,7 +241,13 @@ end
 local function notify(title, message, kind, duration)
     if not State.Notify then return end
     elevate()
-    pcall(function() GuiLibrary:CreateNotification(title, message, duration or 3, kind or "info") end)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "[AJIZ] " .. tostring(title),
+            Text = tostring(message),
+            Duration = duration or 3
+        })
+    end)
 end
 
 local function bindCharacter(c)
@@ -416,7 +437,7 @@ local function candidateSources(gainKey)
     end
     local out = {}
     local preference = gainKey == "strengthGain" and State.StrengthSource or State.SourcePreference
-    local toolsOnly = preference == "Tools only" or preference == "Tools (Hotbar)"
+    local toolsOnly = preference == "Tools only" or preference == "Tools (Hotbar)" or preference == "Tools (Best for Rebirth)"
     local machinesOnly = preference == "Machines only" or preference == "Machines"
     if not toolsOnly then
         for i = 1, math.min(2, #machines) do table.insert(out, machines[i]) end
@@ -1353,7 +1374,7 @@ spawnTask(function()
         elevate()
         if State.AlwaysKingsGym
             and State.FarmMode == "Strength"
-            and State.StrengthSource == "Tools (Hotbar)"
+            and (State.StrengthSource == "Tools (Hotbar)" or State.StrengthSource == "Tools (Best for Rebirth)")
         then
             pcall(teleportToKingsGym)
         end
@@ -1369,41 +1390,599 @@ LocalPlayer.Idled:Connect(function()
     end)
 end)
 
-for _, gui in ipairs(game.CoreGui:GetChildren()) do
-    if gui.Name == "GuiLibraryUI" or gui.Name == "NotificationGui" then
-        pcall(function() gui:Destroy() end)
+-- ========================================================================
+-- 🎨 STANDALONE AJIZ HUB UI SYSTEM (MODERN SKY BLUE & DARK NAVY)
+-- ========================================================================
+
+local function getGuiContainer()
+    if gethui then
+        local success, res = pcall(gethui)
+        if success and res then return res end
+    end
+    local core = nil
+    pcall(function() core = game:GetService("CoreGui") end)
+    if core then
+        local success = pcall(function()
+            local test = Instance.new("Folder")
+            test.Parent = core
+            test:Destroy()
+        end)
+        if success then return core end
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local parentGui = getGuiContainer()
+
+for _, old in ipairs(parentGui:GetChildren()) do
+    if old.Name == "AjizMuscleLegendsHub" or old:GetAttribute("AjizMuscleLegends") then
+        pcall(function() old:Destroy() end)
     end
 end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AjizMuscleLegendsHub"
+ScreenGui:SetAttribute("AjizMuscleLegends", true)
+ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999999
+ScreenGui.Parent = parentGui
 
 if RELOAD_STATE and RELOAD_STATE.onCleanup then
     RELOAD_STATE.onCleanup(function()
         State.Running = false
         State.FarmMode = "Off"
         Runtime.FarmToken = Runtime.FarmToken + 1
-        for _, gui in ipairs(game.CoreGui:GetChildren()) do
-            if gui.Name == "GuiLibraryUI" or gui.Name == "NotificationGui" then
-                pcall(function() gui:Destroy() end)
-            end
+        pcall(function() ScreenGui:Destroy() end)
+    end)
+end
+
+local function makeDraggable(frame, handle)
+    handle = handle or frame
+    local dragging, dragInput, dragStart, startPos
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
     end)
 end
 
-local Window = GuiLibrary:CreateWindow("Muscle Legends | Auto Farm | by dc: cyber_modz", UDim2.new(0, 640, 0, 480))
+-- Mobile Floating "AJ" Toggle Icon
+local FloatIcon = Instance.new("ImageButton")
+FloatIcon.Name = "AjizFloatIcon"
+FloatIcon.Size = UDim2.new(0, 44, 0, 44)
+FloatIcon.Position = UDim2.new(0, 15, 0.45, 0)
+FloatIcon.BackgroundColor3 = Color3.fromRGB(20, 23, 32)
+FloatIcon.BorderSizePixel = 0
+FloatIcon.Active = true
+FloatIcon.Parent = ScreenGui
+Instance.new("UICorner", FloatIcon).CornerRadius = UDim.new(0, 8)
+local iconStroke = Instance.new("UIStroke", FloatIcon)
+iconStroke.Color = Color3.fromRGB(0, 170, 255)
+iconStroke.Thickness = 1.4
 
-local FarmTab    = GuiLibrary:CreateTab(Window, "Farm")
-local BoostTab   = GuiLibrary:CreateTab(Window, "Boosts")
-local CollectTab = GuiLibrary:CreateTab(Window, "Collect")
-local PetsTab    = GuiLibrary:CreateTab(Window, "Pets")
-local StatsTab   = GuiLibrary:CreateTab(Window, "Stats")
-local MiscTab    = GuiLibrary:CreateTab(Window, "Misc")
+local iconLabel = Instance.new("TextLabel", FloatIcon)
+iconLabel.Size = UDim2.new(1, 0, 1, 0)
+iconLabel.BackgroundTransparency = 1
+iconLabel.Font = Enum.Font.GothamBold
+iconLabel.Text = "AJ"
+iconLabel.TextColor3 = Color3.fromRGB(0, 170, 255)
+iconLabel.TextSize = 15
 
-GuiLibrary:CreateSection(FarmTab, "Farm")
+makeDraggable(FloatIcon)
 
-local statusLabel = GuiLibrary:CreateLabel(FarmTab, "Status: Idle")
-local targetLabel = GuiLibrary:CreateLabel(FarmTab, "Target: none")
-local benchLabel  = nil
+-- Main Frame (Clean, compact, and responsive)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainPanel"
+MainFrame.Size = UDim2.new(0, 310, 0, 420)
+MainFrame.Position = UDim2.new(0.5, -155, 0.5, -210)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 17, 24)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+local mainStroke = Instance.new("UIStroke", MainFrame)
+mainStroke.Color = Color3.fromRGB(32, 38, 52)
+mainStroke.Thickness = 1.2
 
-local farmModeDropdown = GuiLibrary:CreateDropdown(FarmTab, "Choose Stat To Farm", {"Off", "Strength", "Agility", "Durability", "Rotate"}, function(v)
+-- Header
+local Header = Instance.new("Frame", MainFrame)
+Header.Size = UDim2.new(1, 0, 0, 38)
+Header.BackgroundColor3 = Color3.fromRGB(20, 23, 32)
+Header.BorderSizePixel = 0
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
+
+local HeaderTitle = Instance.new("TextLabel", Header)
+HeaderTitle.Size = UDim2.new(1, -60, 1, 0)
+HeaderTitle.Position = UDim2.new(0, 12, 0, 0)
+HeaderTitle.BackgroundTransparency = 1
+HeaderTitle.Font = Enum.Font.GothamBold
+HeaderTitle.Text = "⚡ MUSCLE LEGENDS • AJIZ HUB"
+HeaderTitle.TextColor3 = Color3.fromRGB(0, 170, 255)
+HeaderTitle.TextSize = 12.5
+HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local CloseBtn = Instance.new("TextButton", Header)
+CloseBtn.Size = UDim2.new(0, 24, 0, 24)
+CloseBtn.Position = UDim2.new(1, -30, 0.5, -12)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 25)
+CloseBtn.Text = "×"
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.TextColor3 = Color3.fromRGB(235, 60, 60)
+CloseBtn.TextSize = 14
+CloseBtn.AutoButtonColor = false
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 4)
+
+makeDraggable(MainFrame, Header)
+
+FloatIcon.Activated:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+CloseBtn.Activated:Connect(function() MainFrame.Visible = false end)
+
+-- Navigation Tab Bar
+local TabBar = Instance.new("ScrollingFrame", MainFrame)
+TabBar.Size = UDim2.new(1, -16, 0, 30)
+TabBar.Position = UDim2.new(0, 8, 0, 42)
+TabBar.BackgroundTransparency = 1
+TabBar.BorderSizePixel = 0
+TabBar.ScrollBarThickness = 0
+TabBar.CanvasSize = UDim2.new(0, 0, 0, 0)
+TabBar.AutomaticCanvasSize = Enum.AutomaticSize.X
+
+local TabLayout = Instance.new("UIListLayout", TabBar)
+TabLayout.FillDirection = Enum.FillDirection.Horizontal
+TabLayout.Padding = UDim.new(0, 4)
+TabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- Content Container
+local ContentContainer = Instance.new("Frame", MainFrame)
+ContentContainer.Size = UDim2.new(1, -16, 1, -104)
+ContentContainer.Position = UDim2.new(0, 8, 0, 76)
+ContentContainer.BackgroundTransparency = 1
+
+-- Footer
+local Footer = Instance.new("Frame", MainFrame)
+Footer.Size = UDim2.new(1, 0, 0, 24)
+Footer.Position = UDim2.new(0, 0, 1, -24)
+Footer.BackgroundColor3 = Color3.fromRGB(20, 23, 32)
+Footer.BorderSizePixel = 0
+
+local FooterText = Instance.new("TextLabel", Footer)
+FooterText.Size = UDim2.new(1, 0, 1, 0)
+FooterText.BackgroundTransparency = 1
+FooterText.Font = Enum.Font.GothamBold
+FooterText.Text = "AJIZ HUB • ALL-IN-ONE SUITE"
+FooterText.TextColor3 = Color3.fromRGB(0, 170, 255)
+FooterText.TextSize = 10.5
+
+-- Tab Management
+local Tabs = {}
+local TabButtons = {}
+local activeTabName = nil
+
+local function SwitchTab(name)
+    activeTabName = name
+    for tabName, frame in pairs(Tabs) do
+        frame.Visible = (tabName == name)
+    end
+    for tabName, btn in pairs(TabButtons) do
+        local isActive = (tabName == name)
+        btn.BackgroundColor3 = isActive and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(22, 25, 36)
+        btn.TextColor3 = isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(160, 170, 190)
+    end
+end
+
+local function CreateTab(name)
+    local Scroll = Instance.new("ScrollingFrame", ContentContainer)
+    Scroll.Name = name .. "Tab"
+    Scroll.Size = UDim2.new(1, 0, 1, 0)
+    Scroll.BackgroundTransparency = 1
+    Scroll.BorderSizePixel = 0
+    Scroll.ScrollBarThickness = 3
+    Scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 170, 255)
+    Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Scroll.Visible = false
+
+    local Layout = Instance.new("UIListLayout", Scroll)
+    Layout.Padding = UDim.new(0, 5)
+    Layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    local TabBtn = Instance.new("TextButton", TabBar)
+    TabBtn.Size = UDim2.new(0, 60, 1, 0)
+    TabBtn.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
+    TabBtn.BorderSizePixel = 0
+    TabBtn.Font = Enum.Font.GothamBold
+    TabBtn.Text = name
+    TabBtn.TextColor3 = Color3.fromRGB(160, 170, 190)
+    TabBtn.TextSize = 11
+    TabBtn.AutoButtonColor = false
+    Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 5)
+    local btnStroke = Instance.new("UIStroke", TabBtn)
+    btnStroke.Color = Color3.fromRGB(32, 38, 52)
+    btnStroke.Thickness = 0.8
+
+    TabBtn.Activated:Connect(function()
+        SwitchTab(name)
+    end)
+
+    Tabs[name] = Scroll
+    TabButtons[name] = TabBtn
+    return Scroll
+end
+
+-- ========================================================================
+-- 🧩 AJIZ UI BUILDER HELPERS
+-- ========================================================================
+
+local function AddSection(tab, title)
+    local Frame = Instance.new("Frame", tab)
+    Frame.Size = UDim2.new(1, 0, 0, 22)
+    Frame.BackgroundTransparency = 1
+
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(1, -8, 1, 0)
+    Label.Position = UDim2.new(0, 4, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Font = Enum.Font.GothamBold
+    Label.Text = string.upper(title)
+    Label.TextColor3 = Color3.fromRGB(0, 170, 255)
+    Label.TextSize = 10.5
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+end
+
+local function AddLabel(tab, text)
+    local Frame = Instance.new("Frame", tab)
+    Frame.Size = UDim2.new(1, 0, 0, 28)
+    Frame.BackgroundColor3 = Color3.fromRGB(18, 20, 28)
+    Frame.BorderSizePixel = 0
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
+
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(1, -16, 1, 0)
+    Label.Position = UDim2.new(0, 8, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Font = Enum.Font.GothamSemibold
+    Label.Text = text
+    Label.TextColor3 = Color3.fromRGB(220, 230, 245)
+    Label.TextSize = 11
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.TextTruncate = Enum.TextTruncate.AtEnd
+
+    return {
+        SetText = function(str)
+            Label.Text = tostring(str)
+        end
+    }
+end
+
+local function AddToggle(tab, title, default, callback)
+    local state = default or false
+    local Frame = Instance.new("Frame", tab)
+    Frame.Size = UDim2.new(1, 0, 0, 32)
+    Frame.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
+    Frame.BorderSizePixel = 0
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
+    local stroke = Instance.new("UIStroke", Frame)
+    stroke.Color = Color3.fromRGB(32, 38, 52)
+    stroke.Thickness = 0.8
+
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(1, -45, 1, 0)
+    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Font = Enum.Font.GothamBold
+    Label.Text = title
+    Label.TextColor3 = Color3.fromRGB(245, 248, 255)
+    Label.TextSize = 11
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local Box = Instance.new("Frame", Frame)
+    Box.Size = UDim2.new(0, 18, 0, 18)
+    Box.Position = UDim2.new(1, -26, 0.5, -9)
+    Box.BackgroundColor3 = state and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(28, 32, 44)
+    Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 4)
+    local boxStroke = Instance.new("UIStroke", Box)
+    boxStroke.Color = state and Color3.fromRGB(0, 210, 255) or Color3.fromRGB(45, 52, 70)
+
+    local Check = Instance.new("TextLabel", Box)
+    Check.Size = UDim2.new(1, 0, 1, 0)
+    Check.BackgroundTransparency = 1
+    Check.Font = Enum.Font.GothamBold
+    Check.Text = state and "✓" or ""
+    Check.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Check.TextSize = 12
+
+    local Btn = Instance.new("TextButton", Frame)
+    Btn.Size = UDim2.new(1, 0, 1, 0)
+    Btn.BackgroundTransparency = 1
+    Btn.Text = ""
+
+    local function update(val)
+        state = val
+        Box.BackgroundColor3 = state and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(28, 32, 44)
+        boxStroke.Color = state and Color3.fromRGB(0, 210, 255) or Color3.fromRGB(45, 52, 70)
+        Check.Text = state and "✓" or ""
+        if callback then task.spawn(callback, state) end
+    end
+
+    Btn.Activated:Connect(function() update(not state) end)
+    return { SetValue = update }
+end
+
+local function AddButton(tab, title, callback)
+    local Frame = Instance.new("Frame", tab)
+    Frame.Size = UDim2.new(1, 0, 0, 32)
+    Frame.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
+    Frame.BorderSizePixel = 0
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
+    local stroke = Instance.new("UIStroke", Frame)
+    stroke.Color = Color3.fromRGB(32, 38, 52)
+    stroke.Thickness = 0.8
+
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(1, -40, 1, 0)
+    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Font = Enum.Font.GothamBold
+    Label.Text = title
+    Label.TextColor3 = Color3.fromRGB(0, 170, 255)
+    Label.TextSize = 11
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local Arrow = Instance.new("TextLabel", Frame)
+    Arrow.Size = UDim2.new(0, 20, 0, 20)
+    Arrow.Position = UDim2.new(1, -26, 0.5, -10)
+    Arrow.BackgroundTransparency = 1
+    Arrow.Font = Enum.Font.GothamBold
+    Arrow.Text = "▶"
+    Arrow.TextColor3 = Color3.fromRGB(0, 170, 255)
+    Arrow.TextSize = 10
+
+    local Btn = Instance.new("TextButton", Frame)
+    Btn.Size = UDim2.new(1, 0, 1, 0)
+    Btn.BackgroundTransparency = 1
+    Btn.Text = ""
+
+    Btn.Activated:Connect(function()
+        TweenService:Create(Frame, TweenInfo.new(0.08), { BackgroundColor3 = Color3.fromRGB(0, 170, 255) }):Play()
+        task.wait(0.08)
+        TweenService:Create(Frame, TweenInfo.new(0.15), { BackgroundColor3 = Color3.fromRGB(22, 25, 36) }):Play()
+        if callback then task.spawn(callback) end
+    end)
+end
+
+local function AddDropdown(tab, title, options, callback)
+    local items = options or {}
+    local currentIndex = 1
+    if #items == 0 then items = {"None"} end
+
+    local Frame = Instance.new("Frame", tab)
+    Frame.Size = UDim2.new(1, 0, 0, 32)
+    Frame.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
+    Frame.BorderSizePixel = 0
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
+    local stroke = Instance.new("UIStroke", Frame)
+    stroke.Color = Color3.fromRGB(32, 38, 52)
+    stroke.Thickness = 0.8
+
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(1, -40, 1, 0)
+    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Font = Enum.Font.GothamBold
+    Label.Text = title .. ": " .. tostring(items[currentIndex])
+    Label.TextColor3 = Color3.fromRGB(245, 248, 255)
+    Label.TextSize = 11
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local Arrow = Instance.new("TextLabel", Frame)
+    Arrow.Size = UDim2.new(0, 20, 0, 20)
+    Arrow.Position = UDim2.new(1, -26, 0.5, -10)
+    Arrow.BackgroundTransparency = 1
+    Arrow.Font = Enum.Font.GothamBold
+    Arrow.Text = "🔄"
+    Arrow.TextSize = 11
+
+    local Btn = Instance.new("TextButton", Frame)
+    Btn.Size = UDim2.new(1, 0, 1, 0)
+    Btn.BackgroundTransparency = 1
+    Btn.Text = ""
+
+    local function selectIndex(idx)
+        currentIndex = idx
+        local selected = items[currentIndex]
+        Label.Text = title .. ": " .. tostring(selected)
+        if callback then task.spawn(callback, selected) end
+    end
+
+    Btn.Activated:Connect(function()
+        currentIndex = currentIndex + 1
+        if currentIndex > #items then currentIndex = 1 end
+        selectIndex(currentIndex)
+    end)
+
+    return {
+        SetValue = function(val)
+            for i, opt in ipairs(items) do
+                if opt == val then
+                    selectIndex(i)
+                    break
+                end
+            end
+        end,
+        SetOptions = function(newOpts)
+            items = newOpts
+            if #items == 0 then items = {"None"} end
+            currentIndex = 1
+            selectIndex(1)
+        end
+    }
+end
+
+local function AddMultiSelect(tab, title, options, defaultSelected, callback)
+    local selectedMap = defaultSelected or {}
+    local items = options or {}
+    local idx = 1
+    if #items == 0 then items = {"None"} end
+
+    local Frame = Instance.new("Frame", tab)
+    Frame.Size = UDim2.new(1, 0, 0, 32)
+    Frame.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
+    Frame.BorderSizePixel = 0
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
+    local stroke = Instance.new("UIStroke", Frame)
+    stroke.Color = Color3.fromRGB(32, 38, 52)
+    stroke.Thickness = 0.8
+
+    local currentItem = items[idx]
+    local isChecked = selectedMap[currentItem] == true
+
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(1, -65, 1, 0)
+    Label.Position = UDim2.new(0, 10, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Font = Enum.Font.GothamBold
+    Label.Text = title .. ": " .. tostring(currentItem)
+    Label.TextColor3 = Color3.fromRGB(245, 248, 255)
+    Label.TextSize = 10.5
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.TextTruncate = Enum.TextTruncate.AtEnd
+
+    local NextBtn = Instance.new("TextButton", Frame)
+    NextBtn.Size = UDim2.new(0, 20, 0, 20)
+    NextBtn.Position = UDim2.new(1, -52, 0.5, -10)
+    NextBtn.BackgroundTransparency = 1
+    NextBtn.Font = Enum.Font.GothamBold
+    NextBtn.Text = "🔄"
+    NextBtn.TextSize = 11
+
+    local Box = Instance.new("Frame", Frame)
+    Box.Size = UDim2.new(0, 18, 0, 18)
+    Box.Position = UDim2.new(1, -26, 0.5, -9)
+    Box.BackgroundColor3 = isChecked and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(28, 32, 44)
+    Instance.new("UICorner", Box).CornerRadius = UDim.new(0, 4)
+    local boxStroke = Instance.new("UIStroke", Box)
+    boxStroke.Color = isChecked and Color3.fromRGB(0, 210, 255) or Color3.fromRGB(45, 52, 70)
+
+    local Check = Instance.new("TextLabel", Box)
+    Check.Size = UDim2.new(1, 0, 1, 0)
+    Check.BackgroundTransparency = 1
+    Check.Font = Enum.Font.GothamBold
+    Check.Text = isChecked and "✓" or ""
+    Check.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Check.TextSize = 12
+
+    local ToggleBtn = Instance.new("TextButton", Box)
+    ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
+    ToggleBtn.BackgroundTransparency = 1
+    ToggleBtn.Text = ""
+
+    local function refreshDisplay()
+        currentItem = items[idx]
+        isChecked = selectedMap[currentItem] == true
+        Label.Text = title .. ": " .. tostring(currentItem)
+        Box.BackgroundColor3 = isChecked and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(28, 32, 44)
+        boxStroke.Color = isChecked and Color3.fromRGB(0, 210, 255) or Color3.fromRGB(45, 52, 70)
+        Check.Text = isChecked and "✓" or ""
+    end
+
+    NextBtn.Activated:Connect(function()
+        idx = idx + 1
+        if idx > #items then idx = 1 end
+        refreshDisplay()
+    end)
+
+    ToggleBtn.Activated:Connect(function()
+        selectedMap[currentItem] = not (selectedMap[currentItem] == true)
+        refreshDisplay()
+        if callback then task.spawn(callback, selectedMap) end
+    end)
+
+    return {
+        SetOptions = function(newOpts)
+            items = newOpts
+            if #items == 0 then items = {"None"} end
+            idx = 1
+            refreshDisplay()
+        end
+    }
+end
+
+local function AddProgressBar(tab, title, getter)
+    local Frame = Instance.new("Frame", tab)
+    Frame.Size = UDim2.new(1, 0, 0, 36)
+    Frame.BackgroundColor3 = Color3.fromRGB(18, 20, 28)
+    Frame.BorderSizePixel = 0
+    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 5)
+
+    local Label = Instance.new("TextLabel", Frame)
+    Label.Size = UDim2.new(1, -16, 0, 16)
+    Label.Position = UDim2.new(0, 8, 0, 2)
+    Label.BackgroundTransparency = 1
+    Label.Font = Enum.Font.GothamBold
+    Label.Text = title
+    Label.TextColor3 = Color3.fromRGB(220, 230, 245)
+    Label.TextSize = 10.5
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local BarBg = Instance.new("Frame", Frame)
+    BarBg.Size = UDim2.new(1, -16, 0, 8)
+    BarBg.Position = UDim2.new(0, 8, 0, 22)
+    BarBg.BackgroundColor3 = Color3.fromRGB(28, 32, 44)
+    BarBg.BorderSizePixel = 0
+    Instance.new("UICorner", BarBg).CornerRadius = UDim.new(0, 4)
+
+    local Fill = Instance.new("Frame", BarBg)
+    Fill.Size = UDim2.new(0, 0, 1, 0)
+    Fill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    Fill.BorderSizePixel = 0
+    Instance.new("UICorner", Fill).CornerRadius = UDim.new(0, 4)
+
+    spawnTask(function()
+        while running() do
+            if getter then
+                local pct = math.clamp(getter() or 0, 0, 1)
+                Fill.Size = UDim2.new(pct, 0, 1, 0)
+            end
+            task.wait(0.5)
+        end
+    end)
+end
+
+-- ========================================================================
+-- 📑 CREATE TABS & POPULATE AJIZ HUB INTERFACE
+-- ========================================================================
+
+local FarmTab    = CreateTab("Farm")
+local BoostTab   = CreateTab("Boosts")
+local CollectTab = CreateTab("Collect")
+local PetsTab    = CreateTab("Pets")
+local StatsTab   = CreateTab("Stats")
+local MiscTab    = CreateTab("Misc")
+
+-- 1. 🏋️ FARM TAB
+AddSection(FarmTab, "Farm Status & Controls")
+local statusLabel = AddLabel(FarmTab, "Status: Idle")
+local targetLabel = AddLabel(FarmTab, "Target: none")
+local benchLabel  = AddLabel(FarmTab, "Benchmark: not run")
+
+local farmModeDropdown = AddDropdown(FarmTab, "Mode", {"Off", "Strength", "Agility", "Durability", "Rotate"}, function(v)
     if v == "Off" then
         stopFarm()
         notify("Auto Farm", "Stopped", "warning")
@@ -1414,7 +1993,7 @@ local farmModeDropdown = GuiLibrary:CreateDropdown(FarmTab, "Choose Stat To Farm
     end
 end)
 
-GuiLibrary:CreateDropdown(FarmTab, "Strength Method", {"Auto (Fastest)", "Machines", "Tools (Best for Rebirth)"}, function(v)
+AddDropdown(FarmTab, "Strength Source", {"Auto (Fastest)", "Machines", "Tools (Best for Rebirth)"}, function(v)
     State.StrengthSource = v
     Runtime.Rates = {}
     Runtime.Blacklist = {}
@@ -1434,19 +2013,15 @@ end
 
 if State.FarmMode ~= "Off" then setFarmMode("Off") end
 
-GuiLibrary:CreateLabel(FarmTab, "Rotate automatically switches between Strength, Agility, and Durability.")
-GuiLibrary:CreateLabel(FarmTab, "For fast rebirths, choose Tools (Hotbar). Auto picks the highest-yield source.")
+AddSection(FarmTab, "Automatic Rebirth")
+local rebirthLabel = AddLabel(FarmTab, "Next rebirth at: ?")
 
-GuiLibrary:CreateSection(FarmTab, "Automatic Rebirth")
-
-local rebirthLabel = GuiLibrary:CreateLabel(FarmTab, "Next rebirth at: ?")
-
-GuiLibrary:CreateToggle(FarmTab, "Auto Rebirth", false, function(v)
+AddToggle(FarmTab, "Auto Rebirth", false, function(v)
     State.AutoRebirth = v
     if v then requestAutoRebirth() end
 end)
 
-GuiLibrary:CreateButton(FarmTab, "Rebirth Now", function()
+AddButton(FarmTab, "Rebirth Now", function()
     spawnTask(function()
         local wasFarming = State.FarmMode
         Runtime.FarmToken = Runtime.FarmToken + 1
@@ -1457,65 +2032,56 @@ GuiLibrary:CreateButton(FarmTab, "Rebirth Now", function()
     end)
 end)
 
-GuiLibrary:CreateButton(FarmTab, "Stop Farming / Free Character", function()
+AddButton(FarmTab, "Stop Farming / Free Character", function()
     setFarmMode("Off")
 end)
 
-GuiLibrary:CreateSection(BoostTab, "Consumables")
+-- 2. 🧪 BOOSTS TAB
+AddSection(BoostTab, "Consumables & Boosts")
+local boostLabel = AddLabel(BoostTab, "Held: -")
+AddToggle(BoostTab, "Auto Use Boosts", false, function(v) State.AutoBoosts = v end)
+AddButton(BoostTab, "Use All Boosts Now", function() spawnTask(function() useBoosts(true) end) end)
 
-local boostLabel = GuiLibrary:CreateLabel(BoostTab, "Held: -")
-
-GuiLibrary:CreateLabel(BoostTab, "Automatically uses boost items from your backpack.")
-GuiLibrary:CreateToggle(BoostTab, "Automatically Use Boosts", false, function(v) State.AutoBoosts = v end)
-GuiLibrary:CreateButton(BoostTab, "Use All Boosts Now", function() spawnTask(function() useBoosts(true) end) end)
-
-local ultLabel = nil
-
-GuiLibrary:CreateSection(CollectTab, "Automatic Claims")
-GuiLibrary:CreateLabel(CollectTab, "Turn on the rewards you want collected automatically.")
-
-GuiLibrary:CreateToggle(CollectTab, "Auto Chests (6h timers)", false, function(v) State.AutoChests = v end)
-GuiLibrary:CreateToggle(CollectTab, "Auto Group Rewards", false, function(v) State.AutoGroup = v end)
-GuiLibrary:CreateToggle(CollectTab, "Auto Free Gifts (playtime)", false, function(v) State.AutoGifts = v end)
-GuiLibrary:CreateToggle(CollectTab, "Auto Fortune Wheel (free spins)", false, function(v) State.AutoWheel = v end)
-GuiLibrary:CreateToggle(CollectTab, "Auto Get & Collect NPC Quests", false, function(v)
+-- 3. 🎁 COLLECT TAB
+AddSection(CollectTab, "Auto Claim Features")
+AddToggle(CollectTab, "Auto Chests (6h Timers)", false, function(v) State.AutoChests = v end)
+AddToggle(CollectTab, "Auto Group Rewards", false, function(v) State.AutoGroup = v end)
+AddToggle(CollectTab, "Auto Free Gifts (Playtime)", false, function(v) State.AutoGifts = v end)
+AddToggle(CollectTab, "Auto Fortune Wheel (Free Spins)", false, function(v) State.AutoWheel = v end)
+AddToggle(CollectTab, "Auto Story & Daily Quests", false, function(v)
     State.AutoQuests = v
     if v then spawnTask(updateNpcQuests) end
 end)
 
-GuiLibrary:CreateSection(CollectTab, "Manual")
+AddSection(CollectTab, "Manual Claims")
+AddButton(CollectTab, "Claim All Chests Now", function() spawnTask(claimChests) end)
+AddButton(CollectTab, "Claim Group Reward Now", function() spawnTask(claimGroup) end)
+AddButton(CollectTab, "Claim Free Gifts Now", function() spawnTask(claimGifts) end)
+AddButton(CollectTab, "Spin Fortune Wheel Now", function() spawnTask(spinWheel) end)
+AddButton(CollectTab, "Get & Collect NPC Quests Now", function() spawnTask(updateNpcQuests) end)
 
-GuiLibrary:CreateButton(CollectTab, "Claim All Chests Now", function() spawnTask(claimChests) end)
-GuiLibrary:CreateButton(CollectTab, "Claim Group Reward Now", function() spawnTask(claimGroup) end)
-GuiLibrary:CreateButton(CollectTab, "Claim Free Gifts Now", function() spawnTask(claimGifts) end)
-GuiLibrary:CreateButton(CollectTab, "Spin Fortune Wheel Now", function() spawnTask(spinWheel) end)
-GuiLibrary:CreateButton(CollectTab, "Get & Collect NPC Quests Now", function() spawnTask(updateNpcQuests) end)
-
-GuiLibrary:CreateSection(PetsTab, "Hatching")
-GuiLibrary:CreateLabel(PetsTab, "Choose a crystal, then use Auto Hatch or a manual hatch button.")
-
+-- 4. 🐾 PETS TAB
+AddSection(PetsTab, "Crystal Hatching")
 local crystalNames = {}
 for _, c in ipairs(crystalPrices:GetChildren()) do table.insert(crystalNames, c.Name) end
 table.sort(crystalNames)
 
-local hatchLabel = GuiLibrary:CreateLabel(PetsTab, "Selected: Blue Crystal")
+local hatchLabel = AddLabel(PetsTab, "Selected: Blue Crystal")
 
-GuiLibrary:CreateDropdown(PetsTab, "Crystal", crystalNames, function(v)
+AddDropdown(PetsTab, "Crystal", crystalNames, function(v)
     State.HatchCrystal = v
     local price, kind = crystalCost(v)
-    if hatchLabel then hatchLabel.SetText(("Selected: %s  |  %s %s"):format(v, short(price or 0), kind or "Gems")) end
+    if hatchLabel then hatchLabel.SetText(("Selected: %s | %s %s"):format(v, short(price or 0), kind or "Gems")) end
 end)
 
-GuiLibrary:CreateToggle(PetsTab, "Auto Hatch", false, function(v) State.AutoHatch = v end)
-
-GuiLibrary:CreateButton(PetsTab, "Hatch x1", function()
+AddToggle(PetsTab, "Auto Hatch", false, function(v) State.AutoHatch = v end)
+AddButton(PetsTab, "Hatch x1", function()
     spawnTask(function()
         local ok, info = hatchOnce(State.HatchCrystal)
         notify("Hatch", ok and info or ("Failed: " .. tostring(info)), ok and "success" or "error")
     end)
 end)
-
-GuiLibrary:CreateButton(PetsTab, "Hatch x10", function()
+AddButton(PetsTab, "Hatch x10", function()
     spawnTask(function()
         local got = 0
         for _ = 1, 10 do
@@ -1526,82 +2092,73 @@ GuiLibrary:CreateButton(PetsTab, "Hatch x10", function()
     end)
 end)
 
-GuiLibrary:CreateSection(PetsTab, "Management")
+AddSection(PetsTab, "Pet Management")
+AddToggle(PetsTab, "Auto Equip Best Pets", false, function(v) State.AutoEquipPets = v end)
+AddButton(PetsTab, "Equip Best Pets Now", function() spawnTask(equipBestPets) end)
 
-GuiLibrary:CreateLabel(PetsTab, "Perk pets rank first and are never auto-sold:")
-GuiLibrary:CreateLabel(PetsTab, "Swift Samurai +15% rep speed  |  Powercore Hound +25% strength, +15% durability")
-GuiLibrary:CreateLabel(PetsTab, "Tribal Overlord +2 rebirths each  |  Speedy Sally cheaper rebirths")
-
-GuiLibrary:CreateToggle(PetsTab, "Automatically Equip Best Pets", false, function(v) State.AutoEquipPets = v end)
-GuiLibrary:CreateButton(PetsTab, "Equip Best Pets Now", function() spawnTask(equipBestPets) end)
-
-GuiLibrary:CreateMultiSelect(PetsTab, "Auto Sell Rarities", {"Basic", "Rare", "Epic", "Unique", "Advanced"}, {}, function(sel)
+AddMultiSelect(PetsTab, "Auto Sell Rarities", {"Basic", "Rare", "Epic", "Unique", "Advanced"}, {}, function(sel)
     State.SellRarities = sel or {}
 end)
-
-GuiLibrary:CreateToggle(PetsTab, "Auto Sell Selected Rarities", false, function(v) State.AutoSellPets = v end)
-GuiLibrary:CreateButton(PetsTab, "Sell Selected Rarities Now", function() spawnTask(sellJunkPets) end)
+AddToggle(PetsTab, "Auto Sell Selected Rarities", false, function(v) State.AutoSellPets = v end)
+AddButton(PetsTab, "Sell Selected Rarities Now", function() spawnTask(sellJunkPets) end)
 
 local currentPetNames = inventoryPetNames()
 if #currentPetNames == 0 then currentPetNames = {"No pets found"} end
 
-GuiLibrary:CreateLabel(PetsTab, "Exact-name delete removes every unequipped copy; equipped and perk pets are protected.")
-GuiLibrary:CreateMultiSelect(PetsTab, "Auto Delete Pet Names", currentPetNames, {}, function(sel)
+AddMultiSelect(PetsTab, "Auto Delete Pets", currentPetNames, {}, function(sel)
     State.DeletePetNames = sel or {}
 end)
-GuiLibrary:CreateToggle(PetsTab, "Auto Delete Selected Pets", false, function(v) State.AutoDeletePets = v end)
-GuiLibrary:CreateButton(PetsTab, "Delete Selected Pets Now", function()
+AddToggle(PetsTab, "Auto Delete Selected Pets", false, function(v) State.AutoDeletePets = v end)
+AddButton(PetsTab, "Delete Selected Pets Now", function()
     spawnTask(function()
         local n = deleteSelectedPets()
         notify("Pets", n .. " pet(s) deleted", n > 0 and "success" or "warning")
     end)
 end)
 
-GuiLibrary:CreateSection(PetsTab, "Pet Evolution")
-GuiLibrary:CreateLabel(PetsTab, "Auto Evolve combines every set of 5 matching unevolved pets.")
-GuiLibrary:CreateToggle(PetsTab, "Auto Evolve All Ready Pets", false, function(v) State.AutoEvolvePets = v end)
-GuiLibrary:CreateButton(PetsTab, "Evolve All Ready Pets Now", function()
+AddSection(PetsTab, "Pet Evolution")
+AddToggle(PetsTab, "Auto Evolve Ready Pets", false, function(v) State.AutoEvolvePets = v end)
+AddButton(PetsTab, "Evolve All Ready Pets Now", function()
     spawnTask(function()
         local n = evolveReadyPets()
         notify("Pet Evolution", n .. " pet(s) evolved", n > 0 and "success" or "warning")
     end)
 end)
 
-GuiLibrary:CreateSection(StatsTab, "Live Stats")
+-- 5. 📊 STATS TAB
+AddSection(StatsTab, "Live Character Stats")
+local sStrength   = AddLabel(StatsTab, "Strength: -")
+local sAgility    = AddLabel(StatsTab, "Agility: -")
+local sDurability = AddLabel(StatsTab, "Durability: -")
+local sCurrency   = AddLabel(StatsTab, "Gems: -")
+local sRebirths   = AddLabel(StatsTab, "Rebirths: -")
 
-local sStrength   = GuiLibrary:CreateLabel(StatsTab, "Strength: -")
-local sAgility    = GuiLibrary:CreateLabel(StatsTab, "Agility: -")
-local sDurability = GuiLibrary:CreateLabel(StatsTab, "Durability: -")
-local sCurrency   = GuiLibrary:CreateLabel(StatsTab, "Gems: -")
-local sRebirths   = GuiLibrary:CreateLabel(StatsTab, "Rebirths: -")
-
-GuiLibrary:CreateProgressBar(StatsTab, "Progress To Rebirth", function()
+AddProgressBar(StatsTab, "Progress To Rebirth", function()
     local need = rebirthTarget()
     if need <= 0 or need == math.huge then return 0 end
     return Strength.Value / need
 end)
 
-GuiLibrary:CreateSection(StatsTab, "Session")
+AddSection(StatsTab, "Session Tracker")
+local sRate    = AddLabel(StatsTab, "Gains/min: -")
+local sSession = AddLabel(StatsTab, "Session: -")
 
-local sRate    = GuiLibrary:CreateLabel(StatsTab, "Gains/min: -")
-local sSession = GuiLibrary:CreateLabel(StatsTab, "Session: -")
-
-GuiLibrary:CreateButton(StatsTab, "Reset Session Counters", function()
+AddButton(StatsTab, "Reset Session Counters", function()
     Runtime.Reps, Runtime.Hatched, Runtime.Claimed = 0, 0, 0
     Runtime.RebirthCount, Runtime.Boosts, Runtime.Upgrades, Runtime.Evolved = 0, 0, 0, 0
     Runtime.StartClock = os.clock()
     Runtime.StartStats = {Strength = Strength.Value, Agility = Agility.Value, Durability = Durability.Value}
+    notify("Session", "Counters reset successfully", "info")
 end)
 
-GuiLibrary:CreateSection(MiscTab, "Utility")
-GuiLibrary:CreateLabel(MiscTab, "Anti-AFK and notifications are enabled automatically.")
-GuiLibrary:CreateToggle(MiscTab, "Keep Tool Farming In Muscle King Gym", false, function(v)
+-- 6. ⚙️ MISC TAB
+AddSection(MiscTab, "Utilities")
+AddToggle(MiscTab, "Keep Farming In King's Gym", false, function(v)
     State.AlwaysKingsGym = v
     if v then spawnTask(teleportToKingsGym) end
 end)
 
-GuiLibrary:CreateSection(MiscTab, "Teleport")
-
+AddSection(MiscTab, "Teleports")
 local areaParts = areaTeleportParts
 local areaNames = {}
 if areaParts then
@@ -1611,9 +2168,9 @@ end
 if #areaNames == 0 then areaNames = {"none"} end
 
 local selectedArea = areaNames[1]
-GuiLibrary:CreateDropdown(MiscTab, "Area Pad", areaNames, function(v) selectedArea = v end)
+AddDropdown(MiscTab, "Area Pad", areaNames, function(v) selectedArea = v end)
 
-GuiLibrary:CreateButton(MiscTab, "Teleport To Area Pad", function()
+AddButton(MiscTab, "Teleport To Area Pad", function()
     spawnTask(function()
         if not areaParts then return end
         local part = areaParts:FindFirstChild(selectedArea)
@@ -1625,14 +2182,13 @@ GuiLibrary:CreateButton(MiscTab, "Teleport To Area Pad", function()
     end)
 end)
 
-GuiLibrary:CreateButton(MiscTab, "Rejoin Server", function()
+AddButton(MiscTab, "Rejoin Server", function()
     pcall(function() Remotes.Rejoin:FireServer() end)
     pcall(function() game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer) end)
 end)
 
-GuiLibrary:CreateSection(MiscTab, "Session Control")
-
-GuiLibrary:CreateButton(MiscTab, "Stop Everything", function()
+AddSection(MiscTab, "Emergency Control")
+AddButton(MiscTab, "Stop Everything", function()
     State.AutoHatch, State.AutoBoosts, State.AutoUltimates = false, false, false
     State.AutoChests, State.AutoGroup, State.AutoGifts, State.AutoWheel, State.AutoQuests = false, false, false, false, false
     State.AutoEquipPets, State.AutoSellPets, State.AutoDeletePets = false, false, false
@@ -1641,6 +2197,10 @@ GuiLibrary:CreateButton(MiscTab, "Stop Everything", function()
     notify("Auto Farm", "All automation stopped", "warning")
 end)
 
+-- Set Default Active Tab
+SwitchTab("Farm")
+
+-- Realtime UI updater loop
 spawnTask(function()
     local repsProgress = repsCounter()
     local lastReps = repsProgress and repsProgress.Value or 0
@@ -1666,33 +2226,21 @@ spawnTask(function()
             for name, n in pairs(counts) do parts[#parts + 1] = name .. " x" .. n end
             boostLabel.SetText("Held: " .. (#parts > 0 and table.concat(parts, ", ") or "none"))
         end
-        if ultLabel then
-            local owned, total = 0, 0
-            for _, u in ipairs(gameUltimates:GetChildren()) do
-                local maxUp = u:FindFirstChild("maxUpgrades")
-                local lvl = dataIndex("ultimatesFolder", u.Name)
-                if type(lvl) ~= "number" then lvl = 0 end
-                owned = owned + lvl
-                total = total + (maxUp and maxUp.Value or 0)
-            end
-            ultLabel.SetText(("Ultimates: %d/%d levels  |  Rebirths available: %s"):format(owned, total, short(Rebirths.Value)))
-        end
         if sStrength then sStrength.SetText("Strength: " .. short(Strength.Value)) end
         if sAgility then sAgility.SetText("Agility: " .. short(Agility.Value)) end
         if sDurability then sDurability.SetText("Durability: " .. short(Durability.Value)) end
-        if sCurrency then sCurrency.SetText(("Gems: %s   Tokens: %s"):format(short(Gems.Value), short(Tokens.Value))) end
+        if sCurrency then sCurrency.SetText(("Gems: %s  |  Tokens: %s"):format(short(Gems.Value), short(Tokens.Value))) end
         if sRebirths then sRebirths.SetText("Rebirths: " .. short(Rebirths.Value)) end
         if sRate then
-            sRate.SetText(("Gains/min  Str %s  Agi %s  Dur %s"):format(
+            sRate.SetText(("Gains/min: Str %s | Agi %s | Dur %s"):format(
                 short(math.floor((Strength.Value - Runtime.StartStats.Strength) * perMin)),
                 short(math.floor((Agility.Value - Runtime.StartStats.Agility) * perMin)),
                 short(math.floor((Durability.Value - Runtime.StartStats.Durability) * perMin))))
         end
         if sSession then
             local landed = repsProgress and (repsProgress.Value - repsStart) or 0
-            sSession.SetText(("Reps landed: %d (%.1f/s)   Sent: %d   Hatched: %d   Evolved: %d   Claims: %d   Boosts: %d   Ults: %d   Rebirths: %d")
-                :format(landed, landed / elapsed, Runtime.Reps, Runtime.Hatched, Runtime.Evolved,
-                        Runtime.Claimed, Runtime.Boosts, Runtime.Upgrades, Runtime.RebirthCount))
+            sSession.SetText(("Reps: %d (%.1f/s) | Hatched: %d | Claims: %d | Rebirths: %d")
+                :format(landed, landed / elapsed, Runtime.Hatched, Runtime.Claimed, Runtime.RebirthCount))
         end
         task.wait(0.5)
     end
@@ -1725,4 +2273,4 @@ SESSION.api = {
     rebirthChain = rebirthChain,
 }
 
-notify("Muscle Legends", "Auto farm v2 loaded", "success", 4)
+notify("Muscle Legends", "Ajiz Hub loaded successfully!", "success", 4)
