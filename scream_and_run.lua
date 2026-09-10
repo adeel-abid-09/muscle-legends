@@ -922,6 +922,7 @@ ajL.Font = Theme.FontB; ajL.Text = "AJ"; ajL.TextColor3 = Theme.SkyBlue; ajL.Tex
 makeDraggable(AJBtn)
 
 -- Main Frame with UIScale Support
+-- Main Frame with UIScale Support
 local isMin   = false
 local curW    = 260
 local curH    = 340
@@ -933,6 +934,7 @@ Main.Position        = UDim2.new(0.5, -130, 0.5, -170)
 Main.BackgroundColor3= Theme.BG
 Main.BorderSizePixel = 0
 Main.Active          = true
+Main.ClipsDescendants = true
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 8)
 local mS = Instance.new("UIStroke", Main)
 mS.Color = Theme.Border; mS.Thickness = 1.2
@@ -949,7 +951,9 @@ end
 
 -- Header
 local Hdr = Instance.new("Frame", Main)
+Hdr.Name = "Header"
 Hdr.Size = UDim2.new(1, 0, 0, 32); Hdr.BackgroundColor3 = Theme.Header; Hdr.BorderSizePixel = 0
+Hdr.ZIndex = 10
 Instance.new("UICorner", Hdr).CornerRadius = UDim.new(0, 8)
 
 local Ttl = Instance.new("TextLabel", Hdr)
@@ -957,12 +961,14 @@ Ttl.Size = UDim2.new(1, -115, 1, 0); Ttl.Position = UDim2.new(0, 10, 0, 0)
 Ttl.BackgroundTransparency = 1; Ttl.Font = Theme.FontB
 Ttl.Text = "SCREAM AND RUN"; Ttl.TextColor3 = Theme.SkyBlue
 Ttl.TextSize = 11; Ttl.TextXAlignment = Enum.TextXAlignment.Left
+Ttl.ZIndex = 11
 
 -- Scale Down Button (-)
 local ScaleMinus = Instance.new("TextButton", Hdr)
 ScaleMinus.Size = UDim2.new(0, 20, 0, 20); ScaleMinus.Position = UDim2.new(1, -108, 0.5, -10)
 ScaleMinus.BackgroundColor3 = Color3.fromRGB(28, 32, 44); ScaleMinus.Text = "-"
 ScaleMinus.Font = Theme.FontB; ScaleMinus.TextColor3 = Theme.SkyBlue; ScaleMinus.TextSize = 13; ScaleMinus.AutoButtonColor = false
+ScaleMinus.ZIndex = 12
 Instance.new("UICorner", ScaleMinus).CornerRadius = UDim.new(0, 4)
 
 -- Scale Up Button (+)
@@ -970,6 +976,7 @@ local ScalePlus = Instance.new("TextButton", Hdr)
 ScalePlus.Size = UDim2.new(0, 20, 0, 20); ScalePlus.Position = UDim2.new(1, -84, 0.5, -10)
 ScalePlus.BackgroundColor3 = Color3.fromRGB(28, 32, 44); ScalePlus.Text = "+"
 ScalePlus.Font = Theme.FontB; ScalePlus.TextColor3 = Theme.SkyBlue; ScalePlus.TextSize = 13; ScalePlus.AutoButtonColor = false
+ScalePlus.ZIndex = 12
 Instance.new("UICorner", ScalePlus).CornerRadius = UDim.new(0, 4)
 
 -- Minimize Button
@@ -977,6 +984,7 @@ local MinB = Instance.new("TextButton", Hdr)
 MinB.Size = UDim2.new(0, 22, 0, 20); MinB.Position = UDim2.new(1, -58, 0.5, -10)
 MinB.BackgroundColor3 = Color3.fromRGB(28, 32, 44); MinB.Text = "[-]"
 MinB.Font = Theme.FontB; MinB.TextColor3 = Theme.Muted; MinB.TextSize = 10; MinB.AutoButtonColor = false
+MinB.ZIndex = 12
 Instance.new("UICorner", MinB).CornerRadius = UDim.new(0, 4)
 
 -- Close Button
@@ -984,26 +992,8 @@ local XBtn = Instance.new("TextButton", Hdr)
 XBtn.Size = UDim2.new(0, 22, 0, 20); XBtn.Position = UDim2.new(1, -30, 0.5, -10)
 XBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 25); XBtn.Text = "[X]"
 XBtn.Font = Theme.FontB; XBtn.TextColor3 = Theme.Red; XBtn.TextSize = 10; XBtn.AutoButtonColor = false
+XBtn.ZIndex = 12
 Instance.new("UICorner", XBtn).CornerRadius = UDim.new(0, 4)
-
-makeDraggable(Main, Hdr)
-AJBtn.Activated:Connect(function() Main.Visible = not Main.Visible end)
-XBtn.Activated:Connect(function() Main.Visible = false end)
-
-ScaleMinus.Activated:Connect(function()
-    setScale(State.UiScale - 0.1)
-end)
-ScalePlus.Activated:Connect(function()
-    setScale(State.UiScale + 0.1)
-end)
-
-MinB.Activated:Connect(function()
-    isMin = not isMin
-    TweenService:Create(Main, TweenInfo.new(0.2), {
-        Size = isMin and UDim2.new(0, curW, 0, 32) or UDim2.new(0, curW, 0, curH)
-    }):Play()
-    MinB.Text = isMin and "[+]" or "[-]"
-end)
 
 -- Scroll Body
 local Scroll = Instance.new("ScrollingFrame", Main)
@@ -1011,6 +1001,7 @@ Scroll.Size = UDim2.new(1, -10, 1, -56); Scroll.Position = UDim2.new(0, 5, 0, 34
 Scroll.BackgroundTransparency = 1; Scroll.BorderSizePixel = 0
 Scroll.ScrollBarThickness = 2.5; Scroll.ScrollBarImageColor3 = Theme.SkyBlue
 Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+Scroll.ZIndex = 2
 local SL = Instance.new("UIListLayout", Scroll)
 SL.Padding = UDim.new(0, 4); SL.SortOrder = Enum.SortOrder.LayoutOrder
 
@@ -1018,14 +1009,14 @@ SL.Padding = UDim.new(0, 4); SL.SortOrder = Enum.SortOrder.LayoutOrder
 local Ftr = Instance.new("Frame", Main)
 Ftr.Size = UDim2.new(1, 0, 0, 22); Ftr.Position = UDim2.new(0, 0, 1, -22)
 Ftr.BackgroundColor3 = Theme.Header; Ftr.BorderSizePixel = 0
+Ftr.ZIndex = 3
 local FtrL = Instance.new("TextLabel", Ftr)
 FtrL.Name = "Status"; FtrL.Size = UDim2.new(1, -75, 1, 0); FtrL.Position = UDim2.new(0, 8, 0, 0)
 FtrL.BackgroundTransparency = 1; FtrL.Font = Theme.FontB; FtrL.Text = "AJIZ HUB - READY"
 FtrL.TextColor3 = Theme.SkyBlue; FtrL.TextSize = 10.5; FtrL.TextXAlignment = Enum.TextXAlignment.Left
+FtrL.ZIndex = 4
 
--- ========================================================================
--- DYNAMIC CORNER RESIZE HANDLE (VISIBLE & INTERACTIVE)
--- ========================================================================
+-- Dynamic Corner Resize Handle
 local ResizeHandle = Instance.new("TextButton", Main)
 ResizeHandle.Name = "ResizeGrip"
 ResizeHandle.Size = UDim2.new(0, 68, 0, 20)
@@ -1037,7 +1028,59 @@ ResizeHandle.TextColor3 = Theme.SkyBlue
 ResizeHandle.TextSize = 9.5
 ResizeHandle.AutoButtonColor = false
 ResizeHandle.BorderSizePixel = 0
+ResizeHandle.ZIndex = 5
 Instance.new("UICorner", ResizeHandle).CornerRadius = UDim.new(0, 4)
+
+-- Smooth Minimize / Restore Function
+local function toggleMinimize(targetState)
+    if targetState ~= nil then
+        isMin = targetState
+    else
+        isMin = not isMin
+    end
+
+    if isMin then
+        Scroll.Visible = false
+        Ftr.Visible = false
+        ResizeHandle.Visible = false
+        MinB.Text = "[+]"
+        MinB.TextColor3 = Theme.SkyBlue
+        Ttl.Text = "SCREAM AND RUN [CLICK +]"
+        TweenService:Create(Main, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, curW, 0, 32)
+        }):Play()
+    else
+        MinB.Text = "[-]"
+        MinB.TextColor3 = Theme.Muted
+        Ttl.Text = "SCREAM AND RUN"
+        Scroll.Visible = true
+        Ftr.Visible = true
+        ResizeHandle.Visible = true
+        TweenService:Create(Main, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = UDim2.new(0, curW, 0, curH)
+        }):Play()
+    end
+end
+
+makeDraggable(Main, Hdr)
+AJBtn.Activated:Connect(function()
+    if not Main.Visible then
+        Main.Visible = true
+        if isMin then toggleMinimize(false) end
+    else
+        if isMin then
+            toggleMinimize(false)
+        else
+            Main.Visible = false
+        end
+    end
+end)
+
+XBtn.Activated:Connect(function() Main.Visible = false end)
+MinB.Activated:Connect(function() toggleMinimize() end)
+
+ScaleMinus.Activated:Connect(function() setScale(State.UiScale - 0.1) end)
+ScalePlus.Activated:Connect(function() setScale(State.UiScale + 0.1) end)
 
 local resizing = false
 local rStartPos, rStartSize
