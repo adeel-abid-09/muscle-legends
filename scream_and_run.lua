@@ -61,28 +61,37 @@ while not LocalPlayer do
 end
 
 -- ========================================================================
--- SAFE GUI PARENT
+-- SAFE GUI PARENT (100% FAIL-PROOF FOR ALL EXECUTORS & STUDIO)
 -- ========================================================================
-local parentGui
-pcall(function()
+local function getSafeParent()
     if gethui then
         local ok, res = pcall(gethui)
-        if ok and res then parentGui = res end
+        if ok and res then return res end
     end
-end)
-if not parentGui then
-    pcall(function() parentGui = game:GetService("CoreGui") end)
-end
-if not parentGui then
-    parentGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
+    
+    local okCore, coreGui = pcall(function() return game:GetService("CoreGui") end)
+    if okCore and coreGui then
+        local testOk = pcall(function()
+            local test = Instance.new("Folder")
+            test.Parent = coreGui
+            test:Destroy()
+        end)
+        if testOk then return coreGui end
+    end
+    
+    local pg = LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 10)
+    return pg
 end
 
--- Cleanup old Hub GUIs
-for _, child in ipairs(parentGui:GetChildren()) do
-    if child.Name:find("AjizScream") then
-        pcall(function() child:Destroy() end)
+local parentGui = getSafeParent()
+
+pcall(function()
+    for _, child in ipairs(parentGui:GetChildren()) do
+        if child.Name:find("AjizScream") then
+            pcall(function() child:Destroy() end)
+        end
     end
-end
+end)
 
 -- ========================================================================
 -- CONFIGURATION STATE (ALL DEFAULT OFF)
@@ -856,8 +865,20 @@ local Theme = {
 local ScreenGui        = Instance.new("ScreenGui")
 ScreenGui.Name         = "AjizScreamHubV12"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 999999
-ScreenGui.Parent       = parentGui
+ScreenGui.IgnoreGuiInset = true
+
+local parented = false
+pcall(function()
+    ScreenGui.Parent = parentGui
+    parented = true
+end)
+if not parented or not ScreenGui.Parent then
+    pcall(function()
+        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui", 5)
+    end)
+end
 
 local function makeDraggable(frame, handle)
     handle = handle or frame
