@@ -18,38 +18,33 @@ local function safeFireTouch(part1, part2)
     if not part1 or not part2 or not part1.Parent or not part2.Parent then return end
     if firetouchinterest then
         pcall(firetouchinterest, part1, part2, 0)
-        task.wait()
+        task.wait(0.02)
         pcall(firetouchinterest, part1, part2, 1)
     end
-    pcall(function()
-        if part2:IsA("BasePart") and not part2.Anchored then
-            part2.CFrame = part1.CFrame
-        end
-    end)
 end
 
 local function safeFirePrompt(prompt)
-    if not prompt or not prompt.Parent then return end
+    if not prompt or not prompt.Parent or not prompt.Enabled then return end
     pcall(function()
         prompt.HoldDuration = 0
         prompt.RequiresLineOfSight = false
-        prompt.MaxActivationDistance = math.huge
-        prompt.Enabled = true
+        prompt.MaxActivationDistance = 50
     end)
     if fireproximityprompt then
         pcall(fireproximityprompt, prompt)
+    else
+        pcall(function()
+            prompt:InputHoldBegin()
+            task.wait(0.04)
+            prompt:InputHoldEnd()
+        end)
     end
-    pcall(function()
-        prompt:InputHoldBegin()
-        task.wait(0.01)
-        prompt:InputHoldEnd()
-    end)
 end
 
 local function safeFireClick(detector)
     if not detector or not detector.Parent then return end
     pcall(function()
-        detector.MaxActivationDistance = math.huge
+        detector.MaxActivationDistance = 50
     end)
     if fireclickdetector then
         pcall(fireclickdetector, detector)
@@ -488,38 +483,103 @@ local function isExitDoor(obj)
     return false
 end
 
-local function findAllKeys()
-    local keys = {}
+-- ========================================================================
+-- WORLD OBJECT CACHE ENGINE (ELIMINATES LAG & PREVENTS CRASHES)
+-- ========================================================================
+local cachedKeys = {}
+local cachedDoors = {}
+local cachedSearchPrompts = {}
+
+local function refreshWorldCache()
     local myChar = getChar()
-    local myRoot = getRoot()
-    local seen = {}
+    local newKeys = {}
+    local newDoors = {}
+    local newSearches = {}
 
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        if isKeyItem(obj) then
-            local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
-            if part and part.Parent and isValidMapPosition(part.Position) and not seen[part] then
-                seen[part] = true
-                table.insert(keys, part)
+        if not (myChar and obj:IsDescendantOf(myChar)) then
+            -- 1. Keys & Items
+            if isKeyItem(obj) then
+                local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
+                if part and part.Parent and isValidMapPosition(part.Position) and not table.find(newKeys, part) then
+                    table.insert(newKeys, part)
+                end
+            end
+
+            -- 2. Exit Door & Doors
+            if isExitDoor(obj) or isDoorObject(obj) then
+                local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
+                if part and part.Parent and isValidMapPosition(part.Position) and not table.find(newDoors, part) then
+                    table.insert(newDoors, part)
+                end
+            end
+
+            -- 3. Search Prompts (Lockers / Desks)
+            if obj:IsA("ProximityPrompt") and obj.Enabled then
+                local parent = obj.Parent
+                if parent then
+                    local act = (obj.ActionText or ""):lower()
+                    local objT = (obj.ObjectText or ""):lower()
+                    local parN = parent.Name:lower()
+                    for _, kw in ipairs({"search", "locker", "desk", "drawer", "cabinet", "closet", "shelf", "box", "chest", "check", "open"}) do
+                        if act:find(kw) or objT:find(kw) or parN:find(kw) then
+                            table.insert(newSearches, obj)
+                            break
+                        end
+                    end
+                end
             end
         end
     end
 
-    -- Sort keys so closest ones are collected first (prevents bouncing across map)
-    if myRoot and #keys > 1 then
+    cachedKeys = newKeys
+    cachedDoors = newDoors
+    cachedSearchPrompts = newSearches
+end
+
+-- Periodic world cache update thread (Runs every 2.5 seconds, zero frame drops)
+task.spawn(function()
+    while State.Running do
+        pcall(refreshWorldCache)
+        task.wait(2.5)
+    end
+end)
+
+local function findAllKeys()
+    local valid = {}
+    local myRoot = getRoot()
+    for _, k in ipairs(cachedKeys) do
+        if k and k.Parent and isValidMapPosition(k.Position) then
+            table.insert(valid, k)
+        end
+    end
+    if #valid == 0 then
+        pcall(refreshWorldCache)
+        for _, k in ipairs(cachedKeys) do
+            if k and k.Parent and isValidMapPosition(k.Position) then
+                table.insert(valid, k)
+            end
+        end
+    end
+    if myRoot and #valid > 1 then
         local myPos = myRoot.Position
-        table.sort(keys, function(a, b)
+        table.sort(valid, function(a, b)
             return (a.Position - myPos).Magnitude < (b.Position - myPos).Magnitude
         end)
     end
-
-    return keys
+    return valid
 end
 
 local function findExitDoor()
+    for _, d in ipairs(cachedDoors) do
+        if d and d.Parent and isExitDoor(d) and isValidMapPosition(d.Position) then
+            return d
+        end
+    end
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if isExitDoor(obj) then
             local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
-            if part and isValidMapPosition(part.Position) then
+            if part and part.Parent and isValidMapPosition(part.Position) then
                 return part
             end
         end
@@ -532,37 +592,26 @@ local function interactWithObject(part)
     local myRoot = getRoot()
     if not myRoot then return end
 
-    -- 1. Fire all ProximityPrompts
-    if part:IsA("ProximityPrompt") and part.Enabled then
-        safeFirePrompt(part)
-    else
-        for _, p in ipairs(part:GetDescendants()) do
-            if p:IsA("ProximityPrompt") and p.Enabled then
-                safeFirePrompt(p)
-            end
-        end
-        local p = part:FindFirstChildOfClass("ProximityPrompt")
-               or (part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt"))
-        if p and p.Enabled then
-            safeFirePrompt(p)
-        end
+    -- 1. Fire ProximityPrompt safely
+    local prompt = part:FindFirstChildOfClass("ProximityPrompt")
+                or (part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt"))
+    if prompt and prompt.Enabled then
+        safeFirePrompt(prompt)
     end
 
-    -- 2. Fire ClickDetectors
-    if part:IsA("ClickDetector") then
-        safeFireClick(part)
-    else
-        local d = part:FindFirstChildOfClass("ClickDetector")
-               or (part.Parent and part.Parent:FindFirstChildOfClass("ClickDetector"))
-        if d then
-            safeFireClick(d)
-        end
+    -- 2. Fire ClickDetector
+    local detector = part:FindFirstChildOfClass("ClickDetector")
+                  or (part.Parent and part.Parent:FindFirstChildOfClass("ClickDetector"))
+    if detector then
+        safeFireClick(detector)
     end
 
-    -- 3. Touch interaction & Magnet Pull
-    local touchPart = part:IsA("BasePart") and part or (part:IsA("Model") and (part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart")))
-    if touchPart then
-        safeFireTouch(myRoot, touchPart)
+    -- 3. Touch interaction
+    if part:IsA("BasePart") then
+        safeFireTouch(myRoot, part)
+    elseif part:IsA("Model") then
+        local p = part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart")
+        if p then safeFireTouch(myRoot, p) end
     end
 
     -- 4. Tool Handle Pickup
@@ -575,15 +624,14 @@ local function interactWithObject(part)
     end
 end
 
--- Auto Objectives Background Loop (Fast 0.2s tick for instant toggle response)
+-- Auto Objectives Background Loop (Fast 0.3s tick, cached objects, zero lag)
 task.spawn(function()
     while State.Running do
         local myRoot = getRoot()
         if myRoot then
-            -- 1. Auto Collect Keys / Items within range
+            -- 1. Auto Collect Keys in range
             if State.AutoCollectKeys then
-                local keys = findAllKeys()
-                for _, keyPart in ipairs(keys) do
+                for _, keyPart in ipairs(cachedKeys) do
                     if keyPart and keyPart.Parent then
                         local dist = (keyPart.Position - myRoot.Position).Magnitude
                         if dist <= State.CollectRange then
@@ -593,45 +641,32 @@ task.spawn(function()
                 end
             end
 
-            -- 2. Auto Open and Unlock Nearby Doors
+            -- 2. Auto Open Doors in range
             if State.AutoOpenDoors then
-                for _, obj in ipairs(Workspace:GetDescendants()) do
-                    if isDoorObject(obj) or isExitDoor(obj) then
-                        local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-                        if part and isValidMapPosition(part.Position) then
-                            local dist = (part.Position - myRoot.Position).Magnitude
-                            if dist <= 32 then
-                                interactWithObject(part)
-                            end
+                for _, doorPart in ipairs(cachedDoors) do
+                    if doorPart and doorPart.Parent then
+                        local dist = (doorPart.Position - myRoot.Position).Magnitude
+                        if dist <= 30 then
+                            interactWithObject(doorPart)
                         end
                     end
                 end
             end
 
-            -- 3. Auto Search Lockers, Desks, and Drawers
+            -- 3. Auto Search Spots in range
             if State.AutoSearchSpots then
-                for _, obj in ipairs(Workspace:GetDescendants()) do
-                    if obj:IsA("ProximityPrompt") and obj.Enabled then
-                        local parent = obj.Parent
-                        local part = parent and (parent:IsA("BasePart") and parent or parent:FindFirstChildWhichIsA("BasePart"))
-                        if part and isValidMapPosition(part.Position) then
-                            local act = (obj.ActionText or ""):lower()
-                            local objT = (obj.ObjectText or ""):lower()
-                            local parN = parent.Name:lower()
-                            for _, kw in ipairs({"search", "locker", "desk", "drawer", "cabinet", "closet", "shelf", "box", "chest", "check", "open"}) do
-                                if act:find(kw) or objT:find(kw) or parN:find(kw) then
-                                    if (part.Position - myRoot.Position).Magnitude <= 32 then
-                                        safeFirePrompt(obj)
-                                    end
-                                    break
-                                end
-                            end
+                for _, prompt in ipairs(cachedSearchPrompts) do
+                    if prompt and prompt.Parent and prompt.Enabled then
+                        local p = prompt.Parent
+                        local pos = p:IsA("BasePart") and p.Position or (p:IsA("Model") and p.PrimaryPart and p.PrimaryPart.Position)
+                        if pos and (pos - myRoot.Position).Magnitude <= 30 then
+                            safeFirePrompt(prompt)
                         end
                     end
                 end
             end
         end
-        task.wait(0.2)
+        task.wait(0.3)
     end
 end)
 
@@ -648,6 +683,7 @@ local function runSafeAutoWinSequence()
         return false, "Player not ready"
     end
 
+    pcall(refreshWorldCache)
     local keys = findAllKeys()
     local collected = 0
 
@@ -655,20 +691,20 @@ local function runSafeAutoWinSequence()
         for _, k in ipairs(keys) do
             if k and k.Parent and isValidMapPosition(k.Position) then
                 safeTeleport(k.Position, Vector3.new(0, 2.8, 0))
-                task.wait(0.2)
+                task.wait(0.25)
                 interactWithObject(k)
-                task.wait(0.15)
+                task.wait(0.2)
                 collected = collected + 1
             end
         end
     end
 
     -- Teleport to exit
-    task.wait(0.25)
+    task.wait(0.3)
     local exit = findExitDoor()
     if exit and isValidMapPosition(exit.Position) then
         safeTeleport(exit.Position, Vector3.new(0, 2.8, 0))
-        task.wait(0.2)
+        task.wait(0.25)
         interactWithObject(exit)
         autoWinning = false
         return true, "Escaped successfully"
