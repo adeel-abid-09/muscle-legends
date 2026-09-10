@@ -15,21 +15,42 @@
 -- EXECUTOR SAFE WRAPPERS
 -- ========================================================================
 local function safeFireTouch(part1, part2)
+    if not part1 or not part2 or not part1.Parent or not part2.Parent then return end
     if firetouchinterest then
         pcall(firetouchinterest, part1, part2, 0)
-        task.wait(0.01)
+        task.wait()
         pcall(firetouchinterest, part1, part2, 1)
     end
+    pcall(function()
+        if part2:IsA("BasePart") and not part2.Anchored then
+            part2.CFrame = part1.CFrame
+        end
+    end)
 end
 
 local function safeFirePrompt(prompt)
+    if not prompt or not prompt.Parent then return end
+    pcall(function()
+        prompt.HoldDuration = 0
+        prompt.RequiresLineOfSight = false
+        prompt.MaxActivationDistance = math.huge
+        prompt.Enabled = true
+    end)
     if fireproximityprompt then
-        pcall(function() prompt.HoldDuration = 0 end)
         pcall(fireproximityprompt, prompt)
     end
+    pcall(function()
+        prompt:InputHoldBegin()
+        task.wait(0.01)
+        prompt:InputHoldEnd()
+    end)
 end
 
 local function safeFireClick(detector)
+    if not detector or not detector.Parent then return end
+    pcall(function()
+        detector.MaxActivationDistance = math.huge
+    end)
     if fireclickdetector then
         pcall(fireclickdetector, detector)
     end
@@ -280,6 +301,13 @@ RunService.Heartbeat:Connect(function()
             myHum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
         end)
     end
+
+    -- Layer 6: Continuous Speed Boost Enforcement
+    if State.SpeedHack and myHum and myHum.WalkSpeed ~= State.WalkSpeed then
+        pcall(function()
+            myHum.WalkSpeed = State.WalkSpeed
+        end)
+    end
 end)
 
 -- Zero-Damage Touch & Hitbox Stripper (Monster Hitbox Nullification)
@@ -502,29 +530,57 @@ end
 local function interactWithObject(part)
     if not part or not part.Parent then return end
     local myRoot = getRoot()
+    if not myRoot then return end
 
-    local prompt = part:FindFirstChildOfClass("ProximityPrompt")
-                or (part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt"))
-    if prompt and prompt.Enabled then
-        safeFirePrompt(prompt)
+    -- 1. Fire all ProximityPrompts
+    if part:IsA("ProximityPrompt") and part.Enabled then
+        safeFirePrompt(part)
+    else
+        for _, p in ipairs(part:GetDescendants()) do
+            if p:IsA("ProximityPrompt") and p.Enabled then
+                safeFirePrompt(p)
+            end
+        end
+        local p = part:FindFirstChildOfClass("ProximityPrompt")
+               or (part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt"))
+        if p and p.Enabled then
+            safeFirePrompt(p)
+        end
     end
 
-    local detector = part:FindFirstChildOfClass("ClickDetector")
-                  or (part.Parent and part.Parent:FindFirstChildOfClass("ClickDetector"))
-    if detector then
-        safeFireClick(detector)
+    -- 2. Fire ClickDetectors
+    if part:IsA("ClickDetector") then
+        safeFireClick(part)
+    else
+        local d = part:FindFirstChildOfClass("ClickDetector")
+               or (part.Parent and part.Parent:FindFirstChildOfClass("ClickDetector"))
+        if d then
+            safeFireClick(d)
+        end
     end
 
-    if myRoot and part:IsA("BasePart") then
-        safeFireTouch(myRoot, part)
+    -- 3. Touch interaction & Magnet Pull
+    local touchPart = part:IsA("BasePart") and part or (part:IsA("Model") and (part.PrimaryPart or part:FindFirstChildWhichIsA("BasePart")))
+    if touchPart then
+        safeFireTouch(myRoot, touchPart)
+    end
+
+    -- 4. Tool Handle Pickup
+    if part:IsA("Tool") or (part.Parent and part.Parent:IsA("Tool")) then
+        local tool = part:IsA("Tool") and part or part.Parent
+        local handle = tool:FindFirstChild("Handle") or tool:FindFirstChildWhichIsA("BasePart")
+        if handle then
+            safeFireTouch(myRoot, handle)
+        end
     end
 end
 
--- Auto Objectives Background Loop (Smooth & non-blocking)
+-- Auto Objectives Background Loop (Fast 0.2s tick for instant toggle response)
 task.spawn(function()
     while State.Running do
         local myRoot = getRoot()
         if myRoot then
+            -- 1. Auto Collect Keys / Items within range
             if State.AutoCollectKeys then
                 local keys = findAllKeys()
                 for _, keyPart in ipairs(keys) do
@@ -537,13 +593,14 @@ task.spawn(function()
                 end
             end
 
+            -- 2. Auto Open and Unlock Nearby Doors
             if State.AutoOpenDoors then
                 for _, obj in ipairs(Workspace:GetDescendants()) do
                     if isDoorObject(obj) or isExitDoor(obj) then
                         local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
                         if part and isValidMapPosition(part.Position) then
                             local dist = (part.Position - myRoot.Position).Magnitude
-                            if dist <= 28 then
+                            if dist <= 32 then
                                 interactWithObject(part)
                             end
                         end
@@ -551,21 +608,30 @@ task.spawn(function()
                 end
             end
 
+            -- 3. Auto Search Lockers, Desks, and Drawers
             if State.AutoSearchSpots then
                 for _, obj in ipairs(Workspace:GetDescendants()) do
                     if obj:IsA("ProximityPrompt") and obj.Enabled then
                         local parent = obj.Parent
                         local part = parent and (parent:IsA("BasePart") and parent or parent:FindFirstChildWhichIsA("BasePart"))
                         if part and isValidMapPosition(part.Position) then
-                            if (part.Position - myRoot.Position).Magnitude <= (obj.MaxActivationDistance + 5) then
-                                safeFirePrompt(obj)
+                            local act = (obj.ActionText or ""):lower()
+                            local objT = (obj.ObjectText or ""):lower()
+                            local parN = parent.Name:lower()
+                            for _, kw in ipairs({"search", "locker", "desk", "drawer", "cabinet", "closet", "shelf", "box", "chest", "check", "open"}) do
+                                if act:find(kw) or objT:find(kw) or parN:find(kw) then
+                                    if (part.Position - myRoot.Position).Magnitude <= 32 then
+                                        safeFirePrompt(obj)
+                                    end
+                                    break
+                                end
                             end
                         end
                     end
                 end
             end
         end
-        task.wait(0.6)
+        task.wait(0.2)
     end
 end)
 
@@ -670,6 +736,25 @@ task.spawn(function()
 end)
 LocalPlayer.CharacterAdded:Connect(function(c)
     task.spawn(pcall, hookDeath, c)
+    task.spawn(function()
+        task.wait(0.3)
+        local hum = c:WaitForChild("Humanoid", 6)
+        if hum and State.SpeedHack then
+            hum.WalkSpeed = State.WalkSpeed
+        end
+        if State.FullBright then
+            applyFullBright(true)
+        end
+        if State.Fly then
+            toggleFly(false)
+            task.wait(0.1)
+            toggleFly(true)
+        end
+        if State.KeyESP or State.ExitESP or State.MonsterESP or State.PlayerESP then
+            task.wait(0.5)
+            refreshESP()
+        end
+    end)
 end)
 
 -- Safe Hover & Sky Base
@@ -1417,10 +1502,10 @@ AddToggle("Anti Damage (HP Lock)", false, function(v) State.AntiDamage = v end)
 
 -- 4. ESP & VISUALS
 AddSection("Visuals and ESP")
-AddToggle("Key Item ESP", false, function(v) State.KeyESP = v end)
-AddToggle("Exit Door ESP", false, function(v) State.ExitESP = v end)
-AddToggle("Monster ESP", false, function(v) State.MonsterESP = v end)
-AddToggle("Player ESP", false, function(v) State.PlayerESP = v end)
+AddToggle("Key Item ESP", false, function(v) State.KeyESP = v; if v then task.spawn(refreshESP) else clearESP() end end)
+AddToggle("Exit Door ESP", false, function(v) State.ExitESP = v; if v then task.spawn(refreshESP) else clearESP() end end)
+AddToggle("Monster ESP", false, function(v) State.MonsterESP = v; if v then task.spawn(refreshESP) else clearESP() end end)
+AddToggle("Player ESP", false, function(v) State.PlayerESP = v; if v then task.spawn(refreshESP) else clearESP() end end)
 AddToggle("FullBright (No Darkness)", false, function(v) State.FullBright = v; applyFullBright(v) end)
 
 -- 5. MOVEMENT
