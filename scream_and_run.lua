@@ -250,16 +250,22 @@ RunService.Heartbeat:Connect(function()
                 end
             end
 
-            -- Layer 4: Smart Auto Dodge
+            -- Layer 4: Smart Auto Dodge with Cooldown Debounce (Prevents 60FPS Jitter/Hang)
             if (State.TrueGodmode or State.AutoDodge) and myRoot and mRoot then
-                local dist = (mRoot.Position - myRoot.Position).Magnitude
-                if dist <= State.DodgeDistance then
-                    local away = (myRoot.Position - mRoot.Position)
-                    if away.Magnitude < 0.01 then away = Vector3.new(0, 1, 0) end
-                    away = away.Unit
-                    pcall(function()
-                        myRoot.CFrame = CFrame.new(myRoot.Position + away * 30 + Vector3.new(0, 8, 0))
-                    end)
+                local now = os.clock()
+                if (now - (State._lastDodge or 0)) >= 1.5 then
+                    local dist = (mRoot.Position - myRoot.Position).Magnitude
+                    if dist <= State.DodgeDistance then
+                        State._lastDodge = now
+                        local away = (myRoot.Position - mRoot.Position)
+                        if away.Magnitude < 0.01 then away = Vector3.new(0, 1, 0) end
+                        away = away.Unit
+                        pcall(function()
+                            myRoot.CFrame = CFrame.new(myRoot.Position + away * 25 + Vector3.new(0, 3, 0))
+                            myRoot.AssemblyLinearVelocity = Vector3.zero
+                            myRoot.AssemblyAngularVelocity = Vector3.zero
+                        end)
+                    end
                 end
             end
         end
@@ -276,26 +282,15 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Zero-Damage Touch & Hitbox Stripper (Stepped Event for 100% Damage Nullification)
+-- Zero-Damage Touch & Hitbox Stripper (Monster Hitbox Nullification)
 RunService.Stepped:Connect(function()
     if not State.Running then return end
     local char = getChar()
 
-    -- Strip touch transmitters from player character
-    if (State.NukeMonsterHitbox or State.FreezeMonster or State.TrueGodmode) and char then
-        for _, p in ipairs(char:GetDescendants()) do
-            if p:IsA("BasePart") then
-                pcall(function() p.CanTouch = false end)
-            elseif p:IsA("TouchTransmitter") then
-                pcall(function() p:Destroy() end)
-            end
-        end
-    end
-
-    -- Strip touch transmitters and collisions from monster parts
+    -- Strip touch transmitters and collisions from monster parts only (Never strip player's touch!)
     if State.NukeMonsterHitbox or State.FreezeMonster then
         for _, m in ipairs(cachedMonsters) do
-            if m.Parent then
+            if m and m.Parent then
                 for _, p in ipairs(m:GetDescendants()) do
                     if p:IsA("BasePart") then
                         pcall(function()
@@ -324,7 +319,7 @@ end)
 local function flingAllMonsters()
     local count = 0
     for _, m in ipairs(cachedMonsters) do
-        if m.Parent then
+        if m and m.Parent then
             local r = getRoot(m)
             if r then
                 pcall(function()
@@ -341,34 +336,107 @@ local function flingAllMonsters()
 end
 
 -- ========================================================================
--- OBJECT IDENTIFIERS & VALIDATORS (Exact Map Matching)
+-- PRECISE OBJECT IDENTIFIERS & VALIDATORS (ZERO JITTER / TRUE PICKUP)
 -- ========================================================================
-local KEY_KEYWORDS   = {"key", "keycard", "fuse", "battery", "coin", "fuel", "crowbar", "card", "item", "backpack", "book", "note", "paper"}
-local DOOR_KEYWORDS  = {"school", "door", "gate", "hatch", "barrier", "shutter", "entrance", "lock", "exit_door", "exitdoor"}
-local EXIT_KEYWORDS  = {"school", "exit", "escape", "safezone", "safe_zone", "extract", "win_door", "main_door"}
-local SEARCH_KEYWORDS= {"desk", "locker", "backpack", "drawer", "closet", "cabinet", "chest", "box", "shelf", "bookshelf", "table"}
-
 local function isValidMapPosition(pos)
     if not pos then return false end
-    if pos.Y < -50 or pos.Y > 350 then return false end
-    if math.abs(pos.X) > 2500 or math.abs(pos.Z) > 2500 then return false end
+    if pos.Y < -60 or pos.Y > 400 then return false end
+    if math.abs(pos.X) > 3000 or math.abs(pos.Z) > 3000 then return false end
+    return true
+end
+
+-- Smooth, non-jittery safe teleportation
+local function safeTeleport(targetPos, offset)
+    local root = getRoot()
+    local hum  = getHumanoid()
+    if not root or not hum then return false end
+
+    offset = offset or Vector3.new(0, 2.8, 0)
+    local finalPos = targetPos + offset
+
+    pcall(function()
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        root.CFrame = CFrame.new(finalPos)
+        hum:ChangeState(Enum.HumanoidStateType.Running)
+    end)
     return true
 end
 
 local function isKeyItem(obj)
-    if not obj then return false end
-    local n = obj.Name:lower()
-    for _, kw in ipairs(KEY_KEYWORDS) do
-        if n:find(kw) then return true end
+    if not obj or not obj.Parent then return false end
+
+    local myChar = getChar()
+    if myChar and obj:IsDescendantOf(myChar) then return false end
+
+    -- Tools in workspace
+    if obj:IsA("Tool") then
+        local h = obj:FindFirstChild("Handle") or obj:FindFirstChildWhichIsA("BasePart")
+        if h and isValidMapPosition(h.Position) then return true end
     end
-    if obj:IsA("Tool") then return true end
+
+    -- ProximityPrompt Pickups
+    local prompt = obj:FindFirstChildOfClass("ProximityPrompt")
+                or (obj.Parent and obj.Parent:FindFirstChildOfClass("ProximityPrompt"))
+    if prompt and prompt.Enabled then
+        local action = (prompt.ActionText or ""):lower()
+        local objTxt = (prompt.ObjectText or ""):lower()
+        local nameTxt = obj.Name:lower()
+
+        -- Skip container / hiding prompts
+        for _, ban in ipairs({"hide", "sit", "locker", "closet", "cabinet", "chest", "drawer", "wardrobe", "desk", "shelf"}) do
+            if objTxt:find(ban) or nameTxt:find(ban) or action:find(ban) then
+                return false
+            end
+        end
+
+        for _, kw in ipairs({"take", "pick", "grab", "collect", "fuse", "key", "battery", "card", "crowbar", "wrench", "tool", "gas", "fuel", "plank", "tape", "item", "equip"}) do
+            if action:find(kw) or objTxt:find(kw) or nameTxt:find(kw) then
+                return true
+            end
+        end
+    end
+
+    -- ClickDetector on items
+    local detector = obj:FindFirstChildOfClass("ClickDetector")
+                  or (obj.Parent and obj.Parent:FindFirstChildOfClass("ClickDetector"))
+    if detector and detector.MaxActivationDistance > 0 then
+        local n = obj.Name:lower()
+        for _, kw in ipairs({"key", "fuse", "battery", "card", "crowbar", "wrench", "tool", "fuel", "plank"}) do
+            if n:find(kw) and not n:find("keyboard") and not n:find("keypad") and not n:find("keyhole") and not n:find("cardboard") then
+                return true
+            end
+        end
+    end
+
+    -- Physical items on ground with strict filtering
+    local n = obj.Name:lower()
+    local banned = {"keyboard", "keypad", "keyhole", "cardboard", "desk", "shelf", "wall", "floor", "door", "gate", "chair", "table", "lock", "panel", "screen", "button", "light", "mesh", "room", "building", "spawn", "barrier"}
+    for _, b in ipairs(banned) do
+        if n:find(b) then return false end
+    end
+
+    for _, kw in ipairs({"key", "keycard", "fuse", "battery", "crowbar", "wrench", "plank", "card"}) do
+        if n:find(kw) then
+            if obj:IsA("BasePart") and obj.Size.Magnitude < 7 then
+                return true
+            elseif obj:IsA("Model") then
+                local p = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
+                if p and p.Size.Magnitude < 8 then
+                    return true
+                end
+            end
+        end
+    end
+
     return false
 end
 
 local function isDoorObject(obj)
     if not obj then return false end
     local n = obj.Name:lower()
-    for _, kw in ipairs(DOOR_KEYWORDS) do
+    if n:find("exit") or n:find("escape") then return false end
+    for _, kw in ipairs({"door", "gate", "hatch", "barrier", "shutter", "entrance", "lock"}) do
         if n:find(kw) then return true end
     end
     return false
@@ -377,17 +445,17 @@ end
 local function isExitDoor(obj)
     if not obj then return false end
     local n = obj.Name:lower()
-    for _, kw in ipairs(EXIT_KEYWORDS) do
+    for _, kw in ipairs({"exit", "escape", "safezone", "safe_zone", "extract", "win_door", "main_door", "schoolexit", "school_exit", "windoor", "exitdoor", "escapedoor"}) do
         if n:find(kw) then return true end
     end
-    return false
-end
-
-local function isSearchSpot(obj)
-    if not obj then return false end
-    local n = obj.Name:lower()
-    for _, kw in ipairs(SEARCH_KEYWORDS) do
-        if n:find(kw) then return true end
+    local prompt = obj:FindFirstChildOfClass("ProximityPrompt")
+                or (obj.Parent and obj.Parent:FindFirstChildOfClass("ProximityPrompt"))
+    if prompt then
+        local a = (prompt.ActionText or ""):lower()
+        local o = (prompt.ObjectText or ""):lower()
+        if a:find("escape") or a:find("exit") or a:find("extract") or a:find("win") or o:find("escape") or o:find("exit") then
+            return true
+        end
     end
     return false
 end
@@ -395,23 +463,34 @@ end
 local function findAllKeys()
     local keys = {}
     local myChar = getChar()
+    local myRoot = getRoot()
+    local seen = {}
+
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        if (obj:IsA("BasePart") or obj:IsA("Model") or obj:IsA("Tool")) and isKeyItem(obj) then
-            if not (myChar and obj:IsDescendantOf(myChar)) then
-                local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
-                if part and isValidMapPosition(part.Position) then
-                    table.insert(keys, part)
-                end
+        if isKeyItem(obj) then
+            local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
+            if part and part.Parent and isValidMapPosition(part.Position) and not seen[part] then
+                seen[part] = true
+                table.insert(keys, part)
             end
         end
     end
+
+    -- Sort keys so closest ones are collected first (prevents bouncing across map)
+    if myRoot and #keys > 1 then
+        local myPos = myRoot.Position
+        table.sort(keys, function(a, b)
+            return (a.Position - myPos).Magnitude < (b.Position - myPos).Magnitude
+        end)
+    end
+
     return keys
 end
 
 local function findExitDoor()
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if isExitDoor(obj) then
-            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart")
+            local part = obj:IsA("BasePart") and obj or (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")))
             if part and isValidMapPosition(part.Position) then
                 return part
             end
@@ -421,15 +500,12 @@ local function findExitDoor()
 end
 
 local function interactWithObject(part)
-    if not part then return end
+    if not part or not part.Parent then return end
     local myRoot = getRoot()
-    if myRoot then
-        safeFireTouch(myRoot, part)
-    end
 
     local prompt = part:FindFirstChildOfClass("ProximityPrompt")
                 or (part.Parent and part.Parent:FindFirstChildOfClass("ProximityPrompt"))
-    if prompt then
+    if prompt and prompt.Enabled then
         safeFirePrompt(prompt)
     end
 
@@ -438,15 +514,20 @@ local function interactWithObject(part)
     if detector then
         safeFireClick(detector)
     end
+
+    if myRoot and part:IsA("BasePart") then
+        safeFireTouch(myRoot, part)
+    end
 end
 
--- Auto Objectives Loop
+-- Auto Objectives Background Loop (Smooth & non-blocking)
 task.spawn(function()
     while State.Running do
         local myRoot = getRoot()
         if myRoot then
             if State.AutoCollectKeys then
-                for _, keyPart in ipairs(findAllKeys()) do
+                local keys = findAllKeys()
+                for _, keyPart in ipairs(keys) do
                     if keyPart and keyPart.Parent then
                         local dist = (keyPart.Position - myRoot.Position).Magnitude
                         if dist <= State.CollectRange then
@@ -472,11 +553,11 @@ task.spawn(function()
 
             if State.AutoSearchSpots then
                 for _, obj in ipairs(Workspace:GetDescendants()) do
-                    if obj:IsA("ProximityPrompt") then
+                    if obj:IsA("ProximityPrompt") and obj.Enabled then
                         local parent = obj.Parent
                         local part = parent and (parent:IsA("BasePart") and parent or parent:FindFirstChildWhichIsA("BasePart"))
                         if part and isValidMapPosition(part.Position) then
-                            if (part.Position - myRoot.Position).Magnitude <= obj.MaxActivationDistance + 5 then
+                            if (part.Position - myRoot.Position).Magnitude <= (obj.MaxActivationDistance + 5) then
                                 safeFirePrompt(obj)
                             end
                         end
@@ -484,14 +565,14 @@ task.spawn(function()
                 end
             end
         end
-        task.wait(0.35)
+        task.wait(0.6)
     end
 end)
 
--- Safe Auto Win Sequence
+-- Safe & Smooth Auto Win Sequence (Zero Lag / Zero Physics Hang)
 local autoWinning = false
 local function runSafeAutoWinSequence()
-    if autoWinning then return false, "Already running" end
+    if autoWinning then return false, "Already in progress" end
     autoWinning = true
 
     local myRoot = getRoot()
@@ -502,37 +583,37 @@ local function runSafeAutoWinSequence()
     end
 
     local keys = findAllKeys()
-    if #keys == 0 then
-        autoWinning = false
-        return false, "No keys detected on map"
-    end
+    local collected = 0
 
-    pcall(function() myHum.PlatformStand = true end)
-
-    for i, k in ipairs(keys) do
-        if k and k.Parent and isValidMapPosition(k.Position) then
-            myRoot.CFrame = CFrame.new(k.Position + Vector3.new(0, 3, 0))
-            myRoot.AssemblyLinearVelocity = Vector3.zero
-            task.wait(0.25)
-            interactWithObject(k)
-            task.wait(0.2)
+    if #keys > 0 then
+        for _, k in ipairs(keys) do
+            if k and k.Parent and isValidMapPosition(k.Position) then
+                safeTeleport(k.Position, Vector3.new(0, 2.8, 0))
+                task.wait(0.2)
+                interactWithObject(k)
+                task.wait(0.15)
+                collected = collected + 1
+            end
         end
     end
 
-    pcall(function() myHum.PlatformStand = false end)
-
+    -- Teleport to exit
+    task.wait(0.25)
     local exit = findExitDoor()
     if exit and isValidMapPosition(exit.Position) then
-        myRoot.CFrame = CFrame.new(exit.Position + Vector3.new(0, 3.5, 0))
-        myRoot.AssemblyLinearVelocity = Vector3.zero
-        task.wait(0.3)
+        safeTeleport(exit.Position, Vector3.new(0, 2.8, 0))
+        task.wait(0.2)
         interactWithObject(exit)
         autoWinning = false
-        return true, "Teleported to Exit Door"
+        return true, "Escaped successfully"
     end
 
     autoWinning = false
-    return true, "Keys collection completed"
+    if collected > 0 then
+        return true, "Collected " .. tostring(collected) .. " items"
+    else
+        return false, "No active keys detected"
+    end
 end
 
 -- Auto Revive Loop
@@ -1012,7 +1093,7 @@ Ftr.BackgroundColor3 = Theme.Header; Ftr.BorderSizePixel = 0
 Ftr.ZIndex = 3
 local FtrL = Instance.new("TextLabel", Ftr)
 FtrL.Name = "Status"; FtrL.Size = UDim2.new(1, -75, 1, 0); FtrL.Position = UDim2.new(0, 8, 0, 0)
-FtrL.BackgroundTransparency = 1; FtrL.Font = Theme.FontB; FtrL.Text = "AJIZ HUB - READY"
+FtrL.BackgroundTransparency = 1; FtrL.Font = Theme.FontB; FtrL.Text = "AJIZ HUB"
 FtrL.TextColor3 = Theme.SkyBlue; FtrL.TextSize = 10.5; FtrL.TextXAlignment = Enum.TextXAlignment.Left
 FtrL.ZIndex = 4
 
@@ -1245,46 +1326,52 @@ end
 -- 1. OBJECTIVES & ESCAPE
 AddSection("Objectives and Escape")
 AddButton("Auto Collect All Keys", function()
-    FtrL.Text = "STATUS: COLLECTING KEYS..."
-    local ok, msg = runSafeAutoWinSequence()
-    FtrL.Text = "STATUS: " .. msg:upper()
-    task.delay(3.5, function() FtrL.Text = "AJIZ HUB - READY" end)
+    task.spawn(function()
+        FtrL.Text = "STATUS: COLLECTING KEYS..."
+        local ok, msg = runSafeAutoWinSequence()
+        FtrL.Text = "STATUS: " .. msg:upper()
+        task.delay(3, function() FtrL.Text = "AJIZ HUB" end)
+    end)
 end)
 
 AddButton("Teleport to Nearest Key", function()
-    local myRoot = getRoot()
-    if not myRoot then return end
-    local keys = findAllKeys()
-    if #keys == 0 then
-        FtrL.Text = "STATUS: NO KEYS FOUND"
-    else
-        local closest, cDist = nil, math.huge
-        for _, k in ipairs(keys) do
-            local d = (k.Position - myRoot.Position).Magnitude
-            if d < cDist then cDist = d; closest = k end
+    task.spawn(function()
+        local myRoot = getRoot()
+        if not myRoot then return end
+        local keys = findAllKeys()
+        if #keys == 0 then
+            FtrL.Text = "STATUS: NO KEYS DETECTED"
+        else
+            local closest, cDist = nil, math.huge
+            for _, k in ipairs(keys) do
+                local d = (k.Position - myRoot.Position).Magnitude
+                if d < cDist then cDist = d; closest = k end
+            end
+            if closest and isValidMapPosition(closest.Position) then
+                safeTeleport(closest.Position, Vector3.new(0, 2.8, 0))
+                FtrL.Text = "STATUS: TELEPORTED TO " .. closest.Name:upper()
+                task.wait(0.2)
+                interactWithObject(closest)
+            end
         end
-        if closest and isValidMapPosition(closest.Position) then
-            myRoot.CFrame = CFrame.new(closest.Position + Vector3.new(0, 3, 0))
-            myRoot.AssemblyLinearVelocity = Vector3.zero
-            FtrL.Text = "STATUS: TELEPORTED TO " .. closest.Name:upper()
-            interactWithObject(closest)
-        end
-    end
-    task.delay(3, function() FtrL.Text = "AJIZ HUB - READY" end)
+        task.delay(3, function() FtrL.Text = "AJIZ HUB" end)
+    end)
 end)
 
 AddButton("Teleport to Exit Door", function()
-    local myRoot = getRoot()
-    local exit = findExitDoor()
-    if myRoot and exit and isValidMapPosition(exit.Position) then
-        myRoot.CFrame = CFrame.new(exit.Position + Vector3.new(0, 3.5, 0))
-        myRoot.AssemblyLinearVelocity = Vector3.zero
-        FtrL.Text = "STATUS: TELEPORTED TO EXIT"
-        interactWithObject(exit)
-    else
-        FtrL.Text = "STATUS: EXIT NOT FOUND"
-    end
-    task.delay(3, function() FtrL.Text = "AJIZ HUB - READY" end)
+    task.spawn(function()
+        local myRoot = getRoot()
+        local exit = findExitDoor()
+        if myRoot and exit and isValidMapPosition(exit.Position) then
+            safeTeleport(exit.Position, Vector3.new(0, 2.8, 0))
+            FtrL.Text = "STATUS: TELEPORTED TO EXIT"
+            task.wait(0.2)
+            interactWithObject(exit)
+        else
+            FtrL.Text = "STATUS: EXIT NOT FOUND"
+        end
+        task.delay(3, function() FtrL.Text = "AJIZ HUB" end)
+    end)
 end)
 
 AddToggle("Auto Collect Keys / Items", false, function(v) State.AutoCollectKeys = v end)
@@ -1295,9 +1382,11 @@ AddSlider("Collect Range", 20, 120, 75, function(v) State.CollectRange = v end)
 -- 2. ADVANCED MONSTER FREEZE & NEUTRALIZER
 AddSection("Monster Freeze and Defense")
 AddButton("Fling Monster to Void", function()
-    local c = flingAllMonsters()
-    FtrL.Text = "STATUS: FLUNG " .. tostring(c) .. " MONSTERS"
-    task.delay(3, function() FtrL.Text = "AJIZ HUB - READY" end)
+    task.spawn(function()
+        local c = flingAllMonsters()
+        FtrL.Text = "STATUS: FLUNG " .. tostring(c) .. " MONSTERS"
+        task.delay(3, function() FtrL.Text = "AJIZ HUB" end)
+    end)
 end)
 
 AddToggle("Freeze Monster Physics", false, function(v)
